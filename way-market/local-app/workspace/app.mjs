@@ -1,3 +1,4 @@
+import { financePageFactory } from '/finance.mjs';
 import { procurementPageFactory } from '/procurement.mjs';
 import { EXCEL_FIELDS, defaultExcelSettings, evaluateExcel } from '/worksheet.mjs';
 import { normalizeAmount } from '/amount.mjs';
@@ -18,6 +19,7 @@ let csrf = '', user = null, configured = true, current = 'home', generation = 0,
 let capabilities = {};
 const backupAlert = $('backup-alert-template').content.firstElementChild.cloneNode(true); backupAlert.hidden = true; $('content').querySelector('header').before(backupAlert);
 backupAlert.querySelector('button').addEventListener('click', () => render('backups'));
+icons.finance = 'M3 5h18v15H3z M3 9h18 M7 14h4 M16 12v5';
 icons.procurement = 'M3 3h2l3 12h10l3-9H6 M9 20h1 M17 20h1';
 icons.backups = 'M4 5h16v14H4z M4 10h16 M8 15h3 M12 2v6 M9 5l3 3 3-3';
 const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('way-workspace-session') : null;
@@ -92,7 +94,7 @@ async function checkSession(force = false) {
 }
 function buildNavigation() {
   const pages = [['home', 'Главная'], ...(canCash() ? [['cash', 'Касса']] : []), ['tasks', 'Задачи'], ['products', 'Каталог']];
-  if (managesCash()) pages.push(['procurement', 'Закупки']);
+  if (managesCash()) pages.push(['procurement', 'Закупки'], ['finance', 'Финансы']);
   if (user.role === 'owner') pages.push(['users', 'Сотрудники'], ['security', 'История']);
   if (user.role === 'owner' && capabilities.backups) pages.push(['backups', 'Резервные копии']);
   for (const [id, label] of pages) {
@@ -102,6 +104,7 @@ function buildNavigation() {
   $('profile-button').textContent = `${user.name} · ${roles[user.role]}`;
 }
 const titles = { home: ['Главная', 'Главное для вашей работы.'], cash: ['Касса', 'Сдача и приём денег — без лишних действий.'], tasks: ['Задачи', 'Поручения и результат работы.'], products: ['Каталог', 'Товары и розничные цены.'], users: ['Сотрудники', 'Личные аккаунты и полномочия.'], security: ['История действий', 'Кто, когда и что изменил.'] };
+titles.finance = ['Финансы', 'Счета, долги, назначения и фактические расчёты.'];
 titles.procurement = ['Закупки', 'Поставщики, лимиты, заказы и приёмка.'];
 titles.backups = ['Резервные копии', 'Зашифрованные копии и проверка восстановления.'];
 async function render(page = current, force = false) {
@@ -112,7 +115,7 @@ async function render(page = current, force = false) {
   for (const b of document.querySelectorAll('[data-page]')) { b.classList.toggle('active', b.dataset.page === page); b.setAttribute('aria-current', b.dataset.page === page ? 'page' : 'false'); }
   $('page').replaceChildren(node('p', 'Загружаем…', 'empty'));
   try {
-    const content = await ({ home: homePage, cash: cashPage, tasks: tasksPage, products: productsPage, users: usersPage, security: securityPage, backups: backupsPage, procurement: procurementPage })[page]();
+    const content = await ({ home: homePage, cash: cashPage, tasks: tasksPage, products: productsPage, users: usersPage, security: securityPage, backups: backupsPage, procurement: procurementPage, finance: financePage })[page]();
     if (version !== renderVersion || !user) return;
     $('page').replaceChildren(content); window.scrollTo(0, 0);
   } catch (error) { if (version === renderVersion && user) $('page').replaceChildren(node('p', error.message, 'error')); }
@@ -124,17 +127,17 @@ window.addEventListener('pagehide', () => scrub());
 window.addEventListener('focus', () => checkSession());
 setInterval(() => { if (user && !document.hidden) checkSession(); }, 30000);
 
-const procurementPage = procurementPageFactory({ api, node, button, field, select, surface, modal, formSubmit, rub, time, today, user: () => user, historyModal: modal,
-  save: async payload => {
-    if (pending) throw new Error('Дождитесь ответа сервера');
-    const issued = generation; pending = payload;
-    const controls = [...$('modal').querySelectorAll('input,select,button')].map(c => [c, c.disabled]);
-    for (const [c] of controls) c.disabled = true;
-    try { await api('/api/procurement', payload); if (issued !== generation) return; dirty = false; $('modal').close(); notice('Документ сохранён'); }
-    finally { if (issued === generation) { pending = null; for (const [c, disabled] of controls) c.disabled = disabled; } }
-    if (issued === generation) await render('procurement', true);
-  }
-});
+async function saveModule(path, page, payload) {
+  if (pending) throw new Error('Дождитесь ответа сервера');
+  const issued = generation; pending = payload;
+  const controls = [...$('modal').querySelectorAll('input,select,button')].map(c => [c, c.disabled]);
+  for (const [c] of controls) c.disabled = true;
+  try { await api(path, payload); if (issued !== generation) return; dirty = false; $('modal').close(); notice('Документ сохранён'); }
+  finally { if (issued === generation) { pending = null; for (const [c, disabled] of controls) c.disabled = disabled; } }
+  if (issued === generation) await render(page, true);
+}
+const procurementPage = procurementPageFactory({ api, node, button, field, select, surface, modal, formSubmit, rub, time, today, user: () => user, historyModal: modal, save: payload => saveModule('/api/procurement', 'procurement', payload) });
+const financePage = financePageFactory({ api, node, button, field, select, surface, modal, formSubmit, rub, time, today, user: () => user, notice, save: payload => saveModule('/api/finance', 'finance', payload) });
 
 async function homePage() {
   const [tasks, cash] = await Promise.all([api('/api/tasks'), canCash() ? api('/api/cash') : []]);
@@ -143,12 +146,13 @@ async function homePage() {
   const metric = (label, amount, detail, target) => { const b = button('', () => render(target), 'metric'); b.append(node('span', label), node('strong', String(amount)), node('small', detail)); metrics.append(b); };
   metric('Мои задачи', tasks.filter(t => t.status === 'open' && t.assigneeId === user.id).length, 'Ожидают выполнения', 'tasks');
   if (canCash()) metric('Ожидают приёма', cash.filter(c => c.status === 'submitted').length, 'Сдачи кассы', 'cash');
+  if (managesCash()) metric('Деньги и долги', '↗', 'Счета, назначения и платежи', 'finance');
   metric('Рабочий каталог', '↗', 'Найти товар и цену', 'products'); root.append(metrics);
   const next = surface('С чего начать');
   if (user.role === 'owner') next.append(node('p', 'Создайте сотрудникам личные аккаунты и назначьте задачи. Для кассовой сдачи выберите кассира; бухгалтер принимает деньги отдельным действием.'), button('Управлять сотрудниками', () => render('users'), 'primary'));
   else if (user.role === 'cashier') next.append(node('p', 'Заполните отчёты своей смены и укажите, сколько передаёте. Фактически полученные деньги внесёт бухгалтер.'), button('Сдать кассу', () => render('cash'), 'primary'));
   else next.append(node('p', 'Задачи связывают участников работы. Каталог доступен без финансовых сведений других сотрудников.'), button('Открыть задачи', () => render('tasks'), 'primary'));
-  next.append(node('p', 'Рабочая область включает аккаунты, кассу, задачи и ручной каталог. Резервные копии доступны владельцу в отдельном разделе. Закупки доступны владельцу и бухгалтеру. Табель, зарплатные начисления и ИИ ещё не подключены.', 'fine')); root.append(next); return root;
+  next.append(node('p', 'Рабочая область включает аккаунты, кассу, задачи и ручной каталог. Резервные копии доступны владельцу в отдельном разделе. Закупки и финансы доступны владельцу и бухгалтеру. Табель, зарплатные начисления и ИИ ещё не подключены.', 'fine')); root.append(next); return root;
 }
 async function usersPage() {
   const users = await api('/api/users'), root = surface('Команда');
@@ -252,7 +256,7 @@ function backupForm(operation, id) {
       } else {
         const result = await api(`/api/backups/${operation}`, payload); f.reset();
         if (operation === 'restore') {
-          const done = node('div'); done.append(node('p', 'Отдельная база восстановлена и проверена. Действующая база не заменена.'), node('p', result.path, 'fine'), node('p', `Пользователей: ${result.stats.users}. Сдач: ${result.stats.cash}. Версий: ${result.stats.cashVersions}. Задач: ${result.stats.tasks}. Товаров: ${result.stats.products}. Поставщиков: ${result.stats.suppliers ?? 0}. Лимитов: ${result.stats.budgets ?? 0}. Заказов: ${result.stats.orders ?? 0}. Накладных: ${result.stats.receipts ?? 0}. Разборов: ${result.stats.reviews ?? 0}.`, 'fine')); $('modal-body').replaceChildren(done);
+          const done = node('div'); done.append(node('p', 'Отдельная база восстановлена и проверена. Действующая база не заменена.'), node('p', result.path, 'fine'), node('p', `Пользователей: ${result.stats.users}. Сдач: ${result.stats.cash}. Версий: ${result.stats.cashVersions}. Задач: ${result.stats.tasks}. Товаров: ${result.stats.products}. Поставщиков: ${result.stats.suppliers ?? 0}. Лимитов: ${result.stats.budgets ?? 0}. Заказов: ${result.stats.orders ?? 0}. Накладных: ${result.stats.receipts ?? 0}. Разборов: ${result.stats.reviews ?? 0}. Счетов: ${result.stats.moneyAccounts ?? 0}. Долгов: ${result.stats.obligations ?? 0}. Назначений: ${result.stats.paymentPlans ?? 0}. Движений: ${result.stats.moneyMovements ?? 0}. Корректировок: ${result.stats.moneyCorrections ?? 0}. Строк сверки банка: ${result.stats.bankLines ?? 0}.`, 'fine')); $('modal-body').replaceChildren(done);
         } else { $('modal').close(); notice(operation === 'verify' ? 'Копия расшифрована: структура, связи и расчёты прошли проверку.' : operation === 'disable' ? 'Расписание отключено.' : 'Копия создана и проверена.'); }
       }
       if (user) await checkSession();
@@ -408,6 +412,7 @@ function printCash(record) {
 }
 $('profile-button').addEventListener('click', () => {
   const content = node('div'); content.append(node('p', `${user.name} · ${roles[user.role]}`));
+  if (managesCash()) content.append(button('Финансы', () => { $('modal').close(); render('finance'); }), button('Закупки', () => { $('modal').close(); render('procurement'); }));
   if (user.role === 'owner') content.append(button('Сотрудники', () => { $('modal').close(); render('users'); }), button('История действий', () => { $('modal').close(); render('security'); }));
   if (user.role === 'owner' && capabilities.backups) content.append(button('Резервные копии', () => { $('modal').close(); render('backups'); }));
   content.append(button('Сменить пароль', () => {

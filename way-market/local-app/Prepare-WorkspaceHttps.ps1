@@ -12,12 +12,12 @@ if ($ClientIp.Count -lt 1 -or $ClientIp.Count -gt 32 -or @($ClientIp | Select-Ob
 if ($ConfigFileName -notmatch '^[a-zA-Z0-9._-]+\.json$') { throw 'Choose a simple JSON configuration filename.' }
 $DataDir = Join-Path $env:ProgramData 'WayMarket-Workspace-Test'
 $AppDir = $PSScriptRoot
-if ((Split-Path -Leaf $AppDir) -ne 'Way-Market-Workspace-Test-0.5') { throw 'Extract the release into its own Way-Market-Workspace-Test-0.5 folder. Never run ACL preparation from a drive root, user folder or shared application parent.' }
+if ((Split-Path -Leaf $AppDir) -ne 'Way-Market-Workspace-Test-0.6') { throw 'Extract the release into its own Way-Market-Workspace-Test-0.6 folder. Never run ACL preparation from a drive root, user folder or shared application parent.' }
 $ConfigFile = Join-Path $DataDir $ConfigFileName
 if (-not (Test-Path -LiteralPath (Join-Path $DataDir 'workspace-test.sqlite'))) { throw 'First create the owner and test data using start-workspace-test.cmd.' }
 if (Test-Path -LiteralPath $ConfigFile) { throw 'Configuration already exists. Nothing was overwritten; choose another ConfigFileName for renewal.' }
 if (Get-NetTCPConnection -State Listen -LocalPort 3211,3443 -ErrorAction SilentlyContinue) { throw 'Stop the workspace servers on ports 3211 and 3443 first.' }
-if (-not (Test-Path -LiteralPath (Join-Path $AppDir 'workspace-https.mjs'))) { throw 'Run from the extracted TEST 0.5 application folder.' }
+if (-not (Test-Path -LiteralPath (Join-Path $AppDir 'workspace-https.mjs'))) { throw 'Run from the extracted TEST 0.6 application folder.' }
 Write-Host "Protecting ONLY the test data and this application: $DataDir ; $AppDir"
 Write-Host 'No router, firewall, certificate trust store or Windows service will be changed.'
 function Protect-Path([string]$Path) {

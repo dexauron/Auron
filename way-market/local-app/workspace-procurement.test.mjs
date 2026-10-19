@@ -110,9 +110,9 @@ test('only owner sets limits; operational roles cannot read procurement through 
   }
   const response = await fetch(base + '/api/procurement', { method: 'POST', headers: { Cookie: `way_workspace=${accountant.token}`, 'Content-Type': 'application/json', 'X-Way-Token': csrf }, body: JSON.stringify(command('budget', { amount: '1' })) }); assert.equal(response.status, 403);
 });
-test('archive v3 recalculates procurement and rejects tampered links, audit, quantities and lost requests', () => {
+test('current archive recalculates procurement and rejects tampered links, audit, quantities and lost requests', () => {
   const f = seed(); save(f.receipt());
-  const archive = makeWorkspaceArchive(w.accounts.workspaceSnapshot(owner.token)); assert.equal(archive.version, 3);
+  const archive = makeWorkspaceArchive(w.accounts.workspaceSnapshot(owner.token)); assert.equal(archive.version, 4);
   for (const mutate of [
     a => { a.tables.workspace_procurement.find(x => x.id === f.order.id).data = JSON.stringify({ ...orderFor(f).data, budgetId: randomUUID() }); },
     a => { a.tables.workspace_requests = a.tables.workspace_requests.filter(x => x.id !== f.orderPayload.requestId); },
@@ -134,7 +134,7 @@ test('encrypted backup restores procurement history, computed reserve and idempo
 test('legacy archives v1/v2 restore without invented procurement documents', () => {
   for (const version of [1, 2]) {
     const empty = structuredClone(makeWorkspaceArchive(w.accounts.workspaceSnapshot(owner.token)));
-    empty.version = version; empty.tables.workspace_procurement = []; delete empty.tables.workspace_procurement;
+    empty.version = version; delete empty.tables.workspace_finance; empty.tables.workspace_procurement = []; delete empty.tables.workspace_procurement;
     empty.tables.workspace_requests = []; empty.tables.workspace_products = [];
     empty.tables.account_events = empty.tables.account_events.filter(e => !e.kind.startsWith('procurement.') && e.kind !== 'product.changed');
     if (version === 1) delete empty.tables.workspace_drafts;

@@ -18,6 +18,7 @@ const root = dirname(fileURLToPath(import.meta.url));
 const files = new Map([
   ['/', ['workspace/index.html', 'text/html; charset=utf-8']],
   ['/workspace.mjs', ['workspace/app.mjs', 'text/javascript; charset=utf-8']],
+  ['/finance.mjs', ['workspace/finance.mjs', 'text/javascript; charset=utf-8']],
   ['/procurement.mjs', ['workspace/procurement.mjs', 'text/javascript; charset=utf-8']],
   ['/workspace.css', ['workspace/style.css', 'text/css; charset=utf-8']],
   ['/worksheet.mjs', ['worksheet.mjs', 'text/javascript; charset=utf-8']],
@@ -92,6 +93,9 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
         if (path === '/api/tasks') return send(200, workspace.tasks(token));
         if (path === '/api/products') return send(200, workspace.products(token));
         if (path === '/api/procurement') return send(200, workspace.procurement(token));
+        if (path === '/api/finance') return send(200, workspace.finance(token));
+        if (path.startsWith('/api/finance/history/')) return send(200, workspace.financeHistory(token, path.slice('/api/finance/history/'.length)));
+        if (path === '/api/finance/report') { const query = new URL(req.url, origin).searchParams; return send(200, workspace.financeReport(token, query.get('start'), query.get('end'))); }
         if (path.startsWith('/api/procurement/history/')) return send(200, workspace.procurementHistory(token, path.slice('/api/procurement/history/'.length)));
       }
       if (req.method === 'POST') {
@@ -115,6 +119,7 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
         if (path === '/api/tasks') return send(200, workspace.taskSave(token, payload));
         if (path === '/api/products') return send(200, workspace.productSave(token, payload));
         if (path === '/api/procurement') return send(200, workspace.procurementSave(token, payload));
+        if (path === '/api/finance') return send(200, workspace.financeSave(token, payload));
       }
       return send(404, { error: 'Раздел не найден' });
     } catch (error) {
