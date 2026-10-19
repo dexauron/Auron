@@ -128,7 +128,7 @@ export function createBackupService(workspace, { directory, restoreDirectory, in
           restored = openWorkspace(path); restored.accounts.restoreWorkspace(archive, actor.id); restored.accounts.checkpoint();
           const restoredOwner = archive.tables.account_users.find(u => u.active && u.role === 'owner');
           const check = await backupWorker({ operation: 'check-restore', archive, tables: restored.accounts.workspaceSnapshot({ id: restoredOwner.id, version: restoredOwner.version }) });
-          for (const key of ['users', 'cash', 'cashVersions', 'tasks', 'products']) if (check.stats[key] !== stats[key]) throw new Error('Проверка восстановления не совпала');
+          for (const key of ['users', 'cash', 'cashVersions', 'tasks', 'products', 'drafts', 'suppliers', 'budgets', 'orders', 'receipts', 'reviews']) if (check.stats[key] !== stats[key]) throw new Error('Проверка восстановления не совпала');
           restored.accounts.checkpoint(); restored.close(); restored = null;
           allowed(token); accounts.backupEvent(token, 'restore-checked', { id, path, stats });
           return { path, stats, switched: false, sessionsRestored: false };

@@ -18,6 +18,7 @@ const root = dirname(fileURLToPath(import.meta.url));
 const files = new Map([
   ['/', ['workspace/index.html', 'text/html; charset=utf-8']],
   ['/workspace.mjs', ['workspace/app.mjs', 'text/javascript; charset=utf-8']],
+  ['/procurement.mjs', ['workspace/procurement.mjs', 'text/javascript; charset=utf-8']],
   ['/workspace.css', ['workspace/style.css', 'text/css; charset=utf-8']],
   ['/worksheet.mjs', ['worksheet.mjs', 'text/javascript; charset=utf-8']],
   ['/domain.mjs', ['domain.mjs', 'text/javascript; charset=utf-8']],
@@ -90,6 +91,8 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
         if (match) return send(200, workspace.cashGet(token, match[1], Boolean(match[2])));
         if (path === '/api/tasks') return send(200, workspace.tasks(token));
         if (path === '/api/products') return send(200, workspace.products(token));
+        if (path === '/api/procurement') return send(200, workspace.procurement(token));
+        if (path.startsWith('/api/procurement/history/')) return send(200, workspace.procurementHistory(token, path.slice('/api/procurement/history/'.length)));
       }
       if (req.method === 'POST') {
         if (path.startsWith('/api/backups/') && backupService) {
@@ -111,6 +114,7 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
         if (path === '/api/cash-drafts') return send(200, workspace.draftSave(token, payload));
         if (path === '/api/tasks') return send(200, workspace.taskSave(token, payload));
         if (path === '/api/products') return send(200, workspace.productSave(token, payload));
+        if (path === '/api/procurement') return send(200, workspace.procurementSave(token, payload));
       }
       return send(404, { error: 'Раздел не найден' });
     } catch (error) {

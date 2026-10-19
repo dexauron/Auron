@@ -211,4 +211,25 @@ await scenario('Stale form cannot save under an account whose cookie changed in 
   assert.deepEqual(await (await ctx.request.get(base + '/api/cash-drafts')).json(), []);
   assert.deepEqual(w.draftList(owner.token), []);
 });
+for (const width of [1440, 390, 320]) await scenario(`Procurement supplier, budget, partial receipt and discrepancy at ${width}px`, { width, height: 960 }, async ({ w, page, login, nav }) => {
+  await w.accounts.bootstrapOwner({ login: 'owner', name: 'Владелец', password });
+  const owner = await w.accounts.login({ login: 'owner', password });
+  w.productSave(owner.token, { requestId: crypto.randomUUID(), expectedVersion: 0, name: 'Молоко', barcode: '', price: '90', active: true });
+  await login(); await nav('Закупки').click();
+  const dialog = page.locator('#modal');
+  const fill = async (name, value) => dialog.locator(`[name=${name}]`).fill(value);
+  const save = async () => { await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click(); await dialog.waitFor({ state: 'hidden' }); await page.getByRole('heading', { name: 'Лимиты', exact: true }).waitFor(); };
+  await page.getByRole('button', { name: 'Поставщик', exact: true }).click(); await fill('name', 'Поставщик тест'); await fill('contact', '+7 тест'); await save();
+  await page.getByRole('button', { name: 'Установить лимит', exact: true }).click(); await fill('name', 'Октябрь'); await fill('start', '2026-10-01'); await fill('end', '2026-10-31'); await fill('amount', '1000'); await save();
+  await page.getByRole('button', { name: 'Новый заказ', exact: true }).click(); await fill('date', '2026-10-19'); await fill('quantity', '10'); await fill('price', '10'); await save();
+  let order = w.procurement(owner.token).orders[0]; assert.equal(order.reserved, 10000);
+  await page.locator('#page details').filter({ hasText: 'Поставщик тест' }).first().locator('summary').click();
+  await page.getByRole('button', { name: 'Принять поставку', exact: true }).click(); await fill('number', 'ТЕСТ-1'); await fill('date', '2026-10-20'); await fill('quantity', '4'); await fill('price', '11'); await fill('note', 'Цена изменена'); await save();
+  order = w.procurement(owner.token).orders[0]; assert.equal(order.reserved, 6000); assert.equal(order.used, 4400);
+  const receipt = page.locator('#page details').filter({ hasText: '№ ТЕСТ-1' }); await receipt.locator('summary').click(); await receipt.getByRole('button', { name: 'Разобрать', exact: true }).click();
+  await dialog.locator('[name=state]').selectOption('resolved'); await fill('explanation', 'Согласовано с поставщиком'); await fill('reason', 'Проверили накладную'); await save();
+  assert.equal(w.procurement(owner.token).reviews[0].data.state, 'resolved');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  if (snapshots) await page.screenshot({ path: `${snapshots}/procurement-${width}.png`, fullPage: true });
+});
 console.log(`Workspace browser scenarios passed: ${passed}`);
