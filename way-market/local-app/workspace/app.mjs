@@ -21,6 +21,7 @@ icons.backups = 'M4 5h16v14H4z M4 10h16 M8 15h3 M12 2v6 M9 5l3 3 3-3';
 const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('way-workspace-session') : null;
 channel?.addEventListener('message', () => checkSession());
 let noticeTimer;
+class SessionChangedError extends Error {}
 function notice(text) { $('notice').textContent = text; $('notice').hidden = false; clearTimeout(noticeTimer); noticeTimer = setTimeout(() => { $('notice').hidden = true; }, 7000); }
 function scrub() {
   generation++; renderVersion++; user = null; dirty = false; pending = null;
@@ -31,9 +32,9 @@ function scrub() {
 }
 async function api(path, data) {
   const issued = generation;
-  const r = await fetch(path, data === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Way-Token': csrf }, body: JSON.stringify(data) });
+  const r = await fetch(path, data === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Way-Token': csrf, ...(user ? { 'X-Way-Account': user.id } : {}) }, body: JSON.stringify(data) });
   const result = await r.json();
-  if (issued !== generation) throw new Error('Сеанс изменён. Повторите действие после входа.');
+  if (issued !== generation) throw new SessionChangedError('Сеанс изменён. Повторите действие после входа.');
   if (r.status === 401 && user) { scrub(); showEntry(); }
   if (!r.ok) throw new Error(result.error || 'Не удалось выполнить действие');
   return result;
@@ -84,7 +85,7 @@ async function checkSession(force = false) {
     }
     const warning = user?.role === 'owner' && s.backupHealth ? s.backupHealth.lastError || (s.backupHealth.scheduleNeedsUnlock ? 'Автокопии приостановлены: включите расписание заново.' : !s.backupHealth.hasSuccessfulCopy ? 'Резервная копия ещё не создана.' : '') : '';
     backupAlert.hidden = !warning; if (backupAlert.querySelector('span').textContent !== warning) backupAlert.querySelector('span').textContent = warning;
-  } catch (error) { notice('Нет связи с сервером. Сохранение новых данных не подтверждено.'); }
+  } catch (error) { if (!(error instanceof SessionChangedError)) notice('Нет связи с сервером. Сохранение новых данных не подтверждено.'); }
 }
 function buildNavigation() {
   const pages = [['home', 'Главная'], ...(canCash() ? [['cash', 'Касса']] : []), ['tasks', 'Задачи'], ['products', 'Каталог']];
@@ -99,6 +100,7 @@ function buildNavigation() {
 const titles = { home: ['Главная', 'Главное для вашей работы.'], cash: ['Касса', 'Сдача и приём денег — без лишних действий.'], tasks: ['Задачи', 'Поручения и результат работы.'], products: ['Каталог', 'Товары и розничные цены.'], users: ['Сотрудники', 'Личные аккаунты и полномочия.'], security: ['История действий', 'Кто, когда и что изменил.'] };
 titles.backups = ['Резервные копии', 'Зашифрованные копии и проверка восстановления.'];
 async function render(page = current, force = false) {
+  if (pending) { notice('Дождитесь ответа сервера.'); return; }
   if (!user || (!force && dirty && !confirm('Покинуть ввод? Несохранённые изменения будут потеряны.'))) return;
   dirty = false; pending = null; current = page; const version = ++renderVersion;
   $('title').textContent = titles[page][0]; $('subtitle').textContent = titles[page][1];
@@ -183,6 +185,7 @@ async function securityPage() {
   const events = await api('/api/security'), root = surface('Журнал');
   const names = { 'owner.bootstrap': 'Создан владелец', 'account.created': 'Создан аккаунт', 'account.updated': 'Изменены права', 'login.succeeded': 'Вход', 'login.failed': 'Неудачный вход', 'login.throttled': 'Ограничены попытки входа', logout: 'Выход', 'password.changed': 'Изменён пароль', 'cash.submitted': 'Отправлена сдача', 'cash.accepted': 'Принята касса', 'task.changed': 'Изменена задача', 'product.changed': 'Изменён товар' };
   Object.assign(names, { 'backup.started': 'Начато резервирование', 'backup.completed': 'Создана проверенная копия', 'backup.failed': 'Ошибка резервирования', 'backup.downloaded': 'Скачана зашифрованная копия', 'backup.verified': 'Проверена резервная копия', 'backup.restored': 'Восстановлена отдельная база', 'backup.restore-checked': 'Проверено восстановление', 'backup.schedule-enabled': 'Включено расписание копий', 'backup.schedule-disabled': 'Отключено расписание копий' });
+  Object.assign(names, { 'cash-draft.saved': 'Сохранён черновик кассы', 'cash-draft.discarded': 'Удалён черновик кассы', 'cash-draft.submitted': 'Черновик отправлен как сдача' });
   for (const e of events.reverse()) { const details = node('details'), s = node('summary', `${names[e.kind] ?? e.kind} · ${time(e.at_ms)}`); details.append(s, node('p', `Автор: ${e.actor_id ?? 'Неавторизованный вход'}`, 'fine'), node('pre', JSON.stringify(e.detail, null, 2))); root.append(details); } return root;
 }
 async function backupsPage() {
@@ -242,21 +245,45 @@ function backupForm(operation, id) {
 }
 
 async function cashPage() {
-  const records = await api('/api/cash'), root = surface('Сдачи смен'); root.append(button('Новая сдача', () => cashForm(), 'primary'));
+  const [records, drafts] = await Promise.all([api('/api/cash'), api('/api/cash-drafts')]), root = surface('Сдачи смен'); root.append(button('Новая сдача', () => cashForm(), 'primary'));
+  if (drafts.length) {
+    const saved = surface('Мои черновики'); saved.append(node('p', 'Это сохранённый ввод. Он не изменяет кассу и не подтверждает приём денег.', 'fine'));
+    for (const draft of drafts) {
+      const row = node('div', null, 'row draft-row'), caption = node('div', null, 'row-main'); caption.append(node('strong', draft.fields.shiftNo ? `Смена ${draft.fields.shiftNo}` : 'Новая сдача'), node('small', `${time(draft.at)}${draft.outdated ? ' · сдача уже изменена' : ''}`));
+      const open = button('Продолжить', async () => { try { const record = draft.slot === 'new' ? undefined : await api(`/api/cash/${draft.slot}`); await cashForm(record, false, true); } catch (e) { notice(e.message); } });
+      const discard = button('Удалить', async () => {
+        if (!confirm('Удалить этот черновик? Сохранённые кассовые сдачи не изменятся.')) return;
+        discard.disabled = true;
+        try { await api('/api/cash-drafts', { slot: draft.slot, expectedVersion: draft.version, baseVersion: draft.baseVersion, fields: null, requestId: crypto.randomUUID() }); notice('Черновик удалён'); await render('cash', true); } catch (e) { notice(e.message); discard.disabled = false; }
+      }); row.append(caption, open, discard); saved.append(row);
+    } root.append(saved);
+  }
   if (!records.length) root.append(node('p', 'Сдач пока нет. Сначала создайте аккаунты кассиров, затем заполните первую смену.', 'empty'));
   for (const c of records) {
     const row = button('', () => cashForm(c), 'row row-button'), text = node('div', null, 'row-main'); text.append(node('strong', `${c.input.cashier} · ${c.input.date.split('-').reverse().join('.')}`), node('small', `${c.input.register} · смена ${c.input.shiftNo} · версия ${c.version}`)); row.append(text, node('span', c.status === 'accepted' ? 'Принято' : 'На проверке', `badge ${c.status === 'accepted' ? 'ok' : ''}`)); root.append(row);
   } return root;
 }
-async function cashForm(record, viewOnly = false) {
+async function cashForm(record, viewOnly = false, recover = false) {
   try {
+    if (pending) { notice('Дождитесь ответа сервера.'); return; }
     if (dirty && !confirm('Открыть другую сдачу? Несохранённые изменения будут потеряны.')) return;
     const opening = ++renderVersion;
-    const directory = await api('/api/directory');
+    const slot = record?.id ?? 'new';
+    const [directory, draft] = await Promise.all([api('/api/directory'), viewOnly ? null : api(`/api/cash-drafts/${slot}`)]);
     if (opening !== renderVersion || !user) return;
+    if (draft?.fields && draft.outdated) {
+      const content = node('div'); content.append(node('p', 'Сдача уже изменена после сохранения черновика. Ввод сохранён ниже для сверки. Автоматическое наложение на новую версию отключено.'));
+      const captions = { date: 'Дата смены', shiftNo: 'Номер смены', cashierId: 'Кассир', cashBasis: 'Основа наличного отчёта', 'policy-cashReturns': 'Правило возвратов наличными', 'policy-bankReturns': 'Правило возвратов эквайринга', ownerKind: 'Чеки владельца', receipts: 'Количество чеков', documents: 'Количество ФД', reason: 'Причина исправления' };
+      const choices = { collection: 'Инкассация: внесение включено', sales: 'Продажи: внесение отдельно', review: 'Нужно уточнить', included: 'Уже учтены в суммах', subtract: 'Вычитать отдельно', outside: 'Другой период', cash: 'Взял деньги', 'goods-in-cash': 'Товар включён в наличные', 'goods-outside': 'Товар вне наличных' };
+      for (const [name, value] of Object.entries(draft.fields)) if (value) { const label = EXCEL_FIELDS.find(f => f.id === name)?.label ?? captions[name] ?? 'Дополнительная строка', display = name === 'cashierId' ? directory.find(u => u.id === value)?.name ?? 'Сотрудник' : ['cashBasis', 'ownerKind', 'policy-cashReturns', 'policy-bankReturns'].includes(name) ? choices[value] ?? value : value; content.append(node('p', `${label}: ${display}`)); }
+      content.append(button('Вернуться к списку', () => { $('modal').close(); render('cash'); })); modal('Нужно сверить черновик', content); return;
+    }
+    if (draft?.fields && !recover && !confirm('Восстановить ваш сохранённый черновик этой сдачи? Для удаления черновика вернитесь к списку кассы.')) return;
     const settings = record ? structuredClone(record.input.worksheet.settings) : defaultExcelSettings();
     if (!record) { for (const id of ['claimed', 'retained']) { const row = settings.rows.find(r => r.id === id); row.enabled = row.visible = true; } }
     const input = record ? structuredClone(record.input) : { date: today(), register: settings.register, shiftNo: '', cashier: user.name, author: user.name, accountant: managesCash() ? user.name : 'Ожидает приёма', worksheet: { settings, values: Object.fromEntries(EXCEL_FIELDS.map(f => [f.id, ''])), counts: { receipts: '', documents: '' }, sourceNote: '' } };
+    // The controls, preview and submitted snapshot must share the same rules.
+    input.worksheet.settings = settings;
     if (managesCash() && !record) input.worksheet.values.received = '';
     const readonly = viewOnly || user.role === 'cashier' && record?.status === 'accepted';
     const form = node('form'), metadata = surface(), fields = node('div', null, 'fields'); metadata.append(fields);
@@ -283,6 +310,7 @@ async function cashForm(record, viewOnly = false) {
     if (record && !readonly) reason = field(form, 'Что исправлено и почему', 'reason', { maxLength: 500, required: true, placeholder: 'Для каждой новой версии' });
     const bar = node('div', null, 'save-bar'), state = node('small', record ? `Сохранено · версия ${record.version}` : 'Не сохранено'), actions = node('div', null, 'button-row'); bar.append(state, actions);
     const save = button('Отправить сдачу', () => submit(false), 'primary'), accept = button('Принять кассу', () => submit(true), 'primary');
+    if (!readonly) actions.append(button('Сохранить черновик', () => saveDraft()));
     if (!readonly && (!record || record.status !== 'accepted')) actions.append(save); if (managesCash() && !readonly) actions.append(accept);
     if (readonly) bar.append(node('span', 'Версия открыта только для просмотра', 'fine'));
     if (record) actions.append(button('История', async () => {
@@ -309,22 +337,43 @@ async function cashForm(record, viewOnly = false) {
         return r;
       } catch (e) { errors.textContent = e.message; return null; }
     }
-    let working = false, command = null;
+    let working = false, command = null, draftCommand = null, draftVersion = draft?.version ?? 0, hasDraft = Boolean(draft?.fields);
+    function rawFields() { return Object.fromEntries([...form.querySelectorAll('input,select')].map(c => [c.name, c.value])); }
+    async function saveDraft() {
+      if (working || readonly) return;
+      const issued = generation, savingView = renderVersion, operation = {};
+      draftCommand ??= { slot, expectedVersion: draftVersion, baseVersion: record?.version ?? 0, fields: rawFields(), requestId: crypto.randomUUID() };
+      const controls = [...form.querySelectorAll('input,select,button')].map(c => [c, c.disabled]);
+      for (const [c] of controls) c.disabled = true;
+      working = true; pending = operation; state.textContent = 'Сохраняем черновик…';
+      try {
+        const saved = await api('/api/cash-drafts', draftCommand);
+        if (issued !== generation || savingView !== renderVersion) return;
+        draftVersion = saved.version; hasDraft = true; draftCommand = null; command = null; dirty = false;
+        state.textContent = `Черновик сохранён на сервере · ${time(saved.at)}. Изменения не применены к сдаче.`;
+        notice('Черновик сохранён. Его можно продолжить после входа.');
+      } catch (e) { if (issued === generation && savingView === renderVersion) state.textContent = e.message; }
+      finally { working = false; if (pending === operation) pending = null; for (const [c, disabled] of controls) c.disabled = disabled; }
+    }
     async function submit(isAccept) {
       if (working) return; const r = update();
       if (!r || r.errors.length) { const first = r?.errors[0]; errors.textContent = first?.message ?? errors.textContent; const target = first?.setting ? rules : financialInputs.get(first?.field); if (first?.setting) rules.open = true; target?.focus(); return; }
       if (!form.reportValidity()) return;
-      command ??= { requestId: crypto.randomUUID(), id: record?.id, expectedVersion: record?.version ?? 0, cashierId: record?.cashierId ?? cashier.value, input: structuredClone(input), reason: reason?.value ?? '', accept: isAccept };
+      command ??= { requestId: crypto.randomUUID(), id: record?.id, expectedVersion: record?.version ?? 0, cashierId: record?.cashierId ?? cashier.value, input: structuredClone(input), reason: reason?.value ?? '', accept: isAccept, ...(hasDraft ? { draft: { slot, version: draftVersion } } : {}) };
       if (command.accept !== isAccept) { notice('Повторите прежнее действие или измените данные. Результат предыдущей отправки может требовать проверки.'); return; }
       const savingView = renderVersion;
       const controls = [...form.querySelectorAll('input,select,button')].map(c => [c, c.disabled]);
       for (const [c] of controls) c.disabled = true;
-      working = true; state.textContent = 'Сохраняем…';
-      try { const result = await api('/api/cash', command); notice(isAccept ? 'Касса принята. Версия сохранена.' : 'Сдача отправлена на проверку.'); if (savingView !== renderVersion) return; dirty = false; command = null; const saved = await api(`/api/cash/${result.id}`); if (savingView === renderVersion) await cashForm(saved); }
-      catch (e) { state.textContent = e.message; } finally { working = false; for (const [c, disabled] of controls) c.disabled = disabled; }
+      const operation = {}; pending = operation; working = true; state.textContent = 'Сохраняем…';
+      try { const result = await api('/api/cash', command); notice(isAccept ? 'Касса принята. Версия сохранена.' : 'Сдача отправлена на проверку.'); if (savingView !== renderVersion) return; dirty = false; command = null; const saved = await api(`/api/cash/${result.id}`); if (pending === operation) pending = null; if (savingView === renderVersion) await cashForm(saved); }
+      catch (e) { state.textContent = e.message; } finally { working = false; if (pending === operation) pending = null; for (const [c, disabled] of controls) c.disabled = disabled; }
     }
-    form.addEventListener('input', () => { if (readonly) return; dirty = true; command = null; state.textContent = 'Есть несохранённые изменения'; update(); });
-    form.addEventListener('change', () => { if (readonly) return; dirty = true; command = null; state.textContent = 'Есть несохранённые изменения'; update(); });
+    form.addEventListener('input', () => { if (readonly) return; dirty = true; command = null; draftCommand = null; state.textContent = 'Есть несохранённые изменения. Можно сохранить черновик.'; update(); });
+    form.addEventListener('change', () => { if (readonly) return; dirty = true; command = null; draftCommand = null; state.textContent = 'Есть несохранённые изменения. Можно сохранить черновик.'; update(); });
+    if (draft?.fields && !readonly) {
+      for (const control of form.querySelectorAll('input,select')) if (Object.hasOwn(draft.fields, control.name)) control.value = draft.fields[control.name];
+      state.textContent = `Восстановлен черновик · ${time(draft.at)}. Изменения не применены к сдаче.`;
+    }
     if (readonly) for (const c of form.querySelectorAll('input,select')) c.disabled = true;
     if (!user) return; dirty = false; pending = null; current = 'cash'; ++renderVersion; $('title').textContent = record ? `Смена ${input.shiftNo}` : 'Новая сдача'; $('subtitle').textContent = 'Заполнение и итог на одном экране.'; $('page').replaceChildren(form); update(); window.scrollTo(0, 0);
   } catch (error) { notice(error.message); }

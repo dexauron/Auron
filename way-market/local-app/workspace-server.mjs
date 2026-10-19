@@ -10,6 +10,7 @@ import { InputError } from './domain.mjs';
 import { VersionError } from './workspace-store.mjs';
 import { AccountConflictError } from './accounts.mjs';
 import { createBackupService } from './workspace-backups.mjs';
+import { DraftConflictError } from './workspace-drafts.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const files = new Map([
@@ -65,12 +66,17 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
       }
       let actor;
       try { actor = a.session(token); } catch (error) { if (error instanceof AccessError) return send(401, { error: 'Войдите в аккаунт' }, { 'Set-Cookie': cookie('') }); throw error; }
+      // Reject a stale tab's write if another tab has replaced the browser cookie.
+      if (req.method === 'POST' && req.headers['x-way-account'] && req.headers['x-way-account'] !== actor.id) throw new AccessError('Аккаунт изменён. Обновите страницу перед сохранением.');
       if (req.method === 'GET') {
         if (path === '/api/backups' && backupService) return send(200, await backupService.status(token));
         if (path === '/api/directory') return send(200, workspace.directory(token));
         if (path === '/api/users') return send(200, a.listUsers(token));
         if (path === '/api/security') return send(200, a.securityHistory(token));
         if (path === '/api/cash') return send(200, workspace.cashList(token));
+        if (path === '/api/cash-drafts') return send(200, workspace.draftList(token));
+        const draft = /^\/api\/cash-drafts\/(new|[a-f0-9-]{36})$/.exec(path);
+        if (draft) return send(200, workspace.draftGet(token, draft[1]));
         const match = /^\/api\/cash\/([a-f0-9-]{36})(\/history)?$/.exec(path);
         if (match) return send(200, workspace.cashGet(token, match[1], Boolean(match[2])));
         if (path === '/api/tasks') return send(200, workspace.tasks(token));
@@ -93,14 +99,15 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
         if (path === '/api/users') return send(200, await a.createUser(token, payload));
         if (path === '/api/users/update') return send(200, a.updateUser(token, payload));
         if (path === '/api/cash') return send(200, workspace.cashSave(token, payload));
+        if (path === '/api/cash-drafts') return send(200, workspace.draftSave(token, payload));
         if (path === '/api/tasks') return send(200, workspace.taskSave(token, payload));
         if (path === '/api/products') return send(200, workspace.productSave(token, payload));
       }
       return send(404, { error: 'Раздел не найден' });
     } catch (error) {
       if (res.headersSent) { res.end(); return; }
-      const expected = error instanceof AccessError || error instanceof VersionError || error instanceof AccountConflictError || error instanceof InputError;
-      const status = error instanceof AccessError ? 403 : error instanceof VersionError || error instanceof AccountConflictError ? 409 : error instanceof InputError ? 400 : 500;
+      const expected = error instanceof AccessError || error instanceof VersionError || error instanceof AccountConflictError || error instanceof DraftConflictError || error instanceof InputError;
+      const status = error instanceof AccessError ? 403 : error instanceof VersionError || error instanceof AccountConflictError || error instanceof DraftConflictError ? 409 : error instanceof InputError ? 400 : 500;
       // No database paths, stack traces, request bodies or credential material.
       send(status, { error: expected ? error.message : 'Ошибка сервера. Сохранение не подтверждено.' });
     }

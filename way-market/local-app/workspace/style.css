@@ -4,4 +4,5 @@
 .print-only{display:none}@media print{body.printing #app,body.printing #entry{display:none!important}body.printing .print-only{display:block;padding:20px}td{padding:6px 14px;border-bottom:1px solid #ccc}}
 .backup-menu{display:grid;gap:12px}.backup-menu p{overflow-wrap:anywhere}.statusline+.fine{margin-top:10px}
 .fine{overflow-wrap:anywhere}
+.draft-row{flex-wrap:wrap}.draft-row>.row-main{flex:1 1 180px}.draft-row>button{font-size:15px}
 .backup-alert{display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff6e6;border:1px solid #ebd4a3;border-radius:16px;padding:15px 18px;margin-bottom:24px;font-size:14px;color:#684b17}.backup-alert>span{min-width:0;overflow-wrap:anywhere}.backup-alert>button{flex-shrink:0;font-size:14px}@media(max-width:440px){.backup-alert{align-items:flex-start;flex-direction:column}.backup-alert>button{width:100%}}@media print{.backup-alert{display:none!important}}

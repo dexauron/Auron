@@ -11,7 +11,7 @@ async function run({ operation, password, tables, bytes, archive: source, create
     validateWorkspaceArchive(source);
     const restored = makeWorkspaceArchive(tables), stats = validateWorkspaceArchive(restored);
     for (const table of Object.keys(ARCHIVE_TABLES)) {
-      const expected = source.tables[table], actual = table === 'account_events' ? tables[table].slice(0, expected.length) : tables[table];
+      const expected = source.tables[table] ?? [], actual = table === 'account_events' ? tables[table].slice(0, expected.length) : tables[table];
       if (JSON.stringify(expected) !== JSON.stringify(actual)) throw new Error('Восстановленные записи отличаются от исходной копии');
     }
     return { stats };

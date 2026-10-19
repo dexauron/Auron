@@ -3,6 +3,7 @@ import { openAccounts } from './accounts.mjs';
 import { AccessError } from './access.mjs';
 import { InputError, money } from './domain.mjs';
 import { reconcileExcel, defaultExcelSettings, EXCEL_FIELDS } from './worksheet.mjs';
+import { readDraft, listDrafts, writeDraft, consumeDraft } from './workspace-drafts.mjs';
 
 export class VersionError extends Error {}
 const manager = a => ['owner', 'accountant'].includes(a.role);
@@ -35,6 +36,9 @@ export function openWorkspace(filename, options = {}) {
   const command = accounts.command;
   return {
     accounts,
+    draftList(token) { return command(token, 'cash.submit', (db, actor) => ({ cashierId: actor.id }), (db, actor) => listDrafts(db, actor)); },
+    draftGet(token, slot) { return command(token, 'cash.submit', (db, actor) => ({ cashierId: actor.id }), (db, actor) => readDraft(db, actor, slot)); },
+    draftSave(token, p) { return command(token, 'cash.submit', (db, actor) => ({ cashierId: actor.id }), (db, actor, audit, at) => writeDraft(db, actor, audit, at, p)); },
     directory(token) { return command(token, 'workspace.read', () => ({}), (db, actor) => {
       if (!taskManager(actor)) return [{ id: actor.id, name: actor.name, role: actor.role }];
       return db.prepare('SELECT id,name,role FROM account_users WHERE active=1 ORDER BY name').all();
@@ -72,6 +76,7 @@ export function openWorkspace(filename, options = {}) {
           const reason = old ? text(p.reason, 500) : '';
           if (old) { const prev = JSON.parse(old.input); if (prev.date !== input.date || prev.register !== input.register || prev.shiftNo !== input.shiftNo) throw new InputError('Нельзя менять дату, кассу и идентификатор сдачи'); }
           const id = old?.id ?? randomUUID(), version = (old?.version ?? 0) + 1;
+          consumeDraft(db, actor, audit, at, p);
           db.prepare('INSERT INTO workspace_cash VALUES (?,?,?,?,?,?,?,?,?,?)').run(id, version, shiftKey, cashierId, actor.id, p.accept ? 'accepted' : 'submitted', at, JSON.stringify(input), JSON.stringify(result), reason);
           audit(p.accept ? 'cash.accepted' : 'cash.submitted', id, { version, cashierId, reason });
           return { id, version };
