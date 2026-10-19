@@ -1,4 +1,5 @@
-import { createServer } from 'node:http';
+import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, mkdir, lstat } from 'node:fs/promises';
 import { join, dirname, isAbsolute, relative } from 'node:path';
@@ -11,6 +12,7 @@ import { VersionError } from './workspace-store.mjs';
 import { AccountConflictError } from './accounts.mjs';
 import { createBackupService } from './workspace-backups.mjs';
 import { DraftConflictError } from './workspace-drafts.mjs';
+import { validateNetworkConfig, allowedNetworkPeer } from './workspace-network.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const files = new Map([
@@ -22,21 +24,27 @@ const files = new Map([
   ['/amount.mjs', ['public/amount.mjs', 'text/javascript; charset=utf-8']]
 ]);
 const equal = (a, b) => typeof a === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
-export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).toString('hex'), backupService = null } = {}) {
+export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).toString('hex'), backupService = null, network = null } = {}) {
   const csrf = randomBytes(32).toString('hex');
   const a = workspace.accounts;
-  const server = createServer(async (req, res) => {
+  const net = network ? validateNetworkConfig(network.config) : null;
+  if (network && (!network.tlsOptions || !a.configured())) throw new Error('Перед HTTPS создайте владельца в локальном режиме');
+  const handler = async (req, res) => {
     const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+      ...(net ? { 'Strict-Transport-Security': 'max-age=86400' } : {}),
       'Cross-Origin-Resource-Policy': 'same-origin', 'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'" };
     const send = (status, body, extra = {}) => { res.writeHead(status, { ...headers, 'Content-Type': 'application/json; charset=utf-8', ...extra }); res.end(JSON.stringify(body)); };
-    const cookie = value => `way_workspace=${value}; HttpOnly; SameSite=Strict; Path=/; ${value ? 'Max-Age=28800' : 'Max-Age=0'}`;
+    const cookieName = net ? '__Host-way_workspace' : 'way_workspace';
+    const cookie = value => `${cookieName}=${value}; HttpOnly; SameSite=Strict; Path=/; ${net ? 'Secure; ' : ''}${value ? 'Max-Age=28800' : 'Max-Age=0'}`;
     try {
       const port = server.address().port;
-      if (![`127.0.0.1:${port}`, `localhost:${port}`].includes(req.headers.host)) throw new AccessError('Недопустимый адрес');
-      if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) throw new AccessError('Внешний источник запрещён');
+      const protocol = net ? 'https:' : 'http:', origin = net?.publicOrigin ?? `http://${req.headers.host}`;
+      if (net ? !req.socket.encrypted || !allowedNetworkPeer(req.socket.remoteAddress,net) || req.headers.host !== new URL(origin).host : ![`127.0.0.1:${port}`, `localhost:${port}`].includes(req.headers.host)) throw new AccessError('Недопустимый адрес');
+      if (Object.keys(req.headers).some(h => h === 'forwarded' || h.startsWith('x-forwarded-'))) throw new AccessError('Прокси-подключение не настроено');
+      if (req.headers.origin && req.headers.origin !== origin) throw new AccessError('Внешний источник запрещён');
       if (req.headers['sec-fetch-site'] && !['same-origin', 'none'].includes(req.headers['sec-fetch-site'])) throw new AccessError('Внешний источник запрещён');
-      const url = new URL(req.url, `http://${req.headers.host}`), path = url.pathname;
-      const token = /(?:^|;\s*)way_workspace=([a-f0-9]{64})(?:;|$)/.exec(req.headers.cookie ?? '')?.[1] ?? '';
+      const url = new URL(req.url, `${protocol}//${req.headers.host}`), path = url.pathname;
+      const token = new RegExp(`(?:^|;\\s*)${cookieName}=([a-f0-9]{64})(?:;|$)`).exec(req.headers.cookie ?? '')?.[1] ?? '';
       if (req.method === 'GET' && files.has(path)) {
         const [file, type] = files.get(path);
         res.writeHead(200, { ...headers, 'Content-Type': type }); res.end(await readFile(join(root, file))); return;
@@ -56,6 +64,7 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
         try { payload = JSON.parse(Buffer.concat(parts).toString('utf8')); } catch { throw new InputError('Неверный JSON'); }
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new InputError('Неверные данные');
         if (path === '/api/bootstrap') {
+          if (net) throw new AccessError('Первоначальная настройка доступна только в локальном режиме');
           if (a.configured() || !equal(payload.code, setupCode)) throw new AccessError('Первичная настройка недоступна или неверен код');
           await a.bootstrapOwner(payload); return send(200, { created: true });
         }
@@ -111,8 +120,11 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
       // No database paths, stack traces, request bodies or credential material.
       send(status, { error: expected ? error.message : 'Ошибка сервера. Сохранение не подтверждено.' });
     }
-  });
+  };
+  const server = net ? createHttpsServer(network.tlsOptions,handler) : createHttpServer(handler);
+  if (net) server.on('connection', socket => { if (!allowedNetworkPeer(socket.remoteAddress,net)) socket.destroy(); });
   server.requestTimeout = 30000; server.headersTimeout = 15000;
+  server.keepAliveTimeout = 5000; server.maxHeadersCount = 40; server.maxConnections = 64; server.maxRequestsPerSocket = 100;
   return { server, setupCode };
 }
 
