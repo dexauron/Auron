@@ -31,7 +31,7 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
   // financial database, including one whose user_version is also 1.
   if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='revisions'").get()) { db.close(); throw new Error('Нужна отдельная база аккаунтов'); }
   const ownTables = new Set(['account_users', 'account_sessions', 'account_events', 'account_attempts']);
-  if (workspace) for (const name of ['workspace_cash', 'workspace_requests', 'workspace_tasks', 'workspace_products']) ownTables.add(name);
+  if (workspace) for (const name of ['workspace_cash', 'workspace_requests', 'workspace_tasks', 'workspace_products', 'workspace_drafts']) ownTables.add(name);
   if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().some(t => !ownTables.has(t.name))) { db.close(); throw new Error('Нужна отдельная база аккаунтов'); }
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS account_users (
@@ -57,7 +57,8 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
     CREATE INDEX IF NOT EXISTS workspace_cash_owner ON workspace_cash(cashier_id,id,version);
     CREATE TABLE IF NOT EXISTS workspace_requests (id TEXT PRIMARY KEY, digest TEXT NOT NULL, result TEXT NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS workspace_tasks (id TEXT PRIMARY KEY, version INTEGER NOT NULL, creator_id TEXT NOT NULL, assignee_id TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, related_cash TEXT, at_ms INTEGER NOT NULL) STRICT;
-    CREATE TABLE IF NOT EXISTS workspace_products (id TEXT PRIMARY KEY, version INTEGER NOT NULL, name TEXT NOT NULL, barcode TEXT NOT NULL, price INTEGER NOT NULL, active INTEGER NOT NULL) STRICT;`);
+    CREATE TABLE IF NOT EXISTS workspace_products (id TEXT PRIMARY KEY, version INTEGER NOT NULL, name TEXT NOT NULL, barcode TEXT NOT NULL, price INTEGER NOT NULL, active INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS workspace_drafts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, slot TEXT NOT NULL, version INTEGER NOT NULL, base_version INTEGER NOT NULL, fields TEXT, at_ms INTEGER NOT NULL, request_id TEXT, request_digest TEXT, UNIQUE(user_id,slot)) STRICT;`);
   let activeKdf = 0;
   const now = () => {
     const n = clock();
@@ -139,7 +140,7 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
         if (Object.keys(ARCHIVE_TABLES).some(table => db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n)) throw new AccountConflictError('Восстановление разрешено только в новую пустую базу');
         for (const [table, columns] of Object.entries(ARCHIVE_TABLES)) {
           const insert = db.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`);
-          for (const row of archive.tables[table]) insert.run(...columns.map(k => row[k]));
+          for (const row of archive.tables[table] ?? []) insert.run(...columns.map(k => row[k]));
         }
         db.prepare('DELETE FROM account_sessions').run(); db.prepare('DELETE FROM account_attempts').run();
         event(null, 'backup.restored', null, { operatorId, sourceCreatedAt: archive.createdAt, sourceDigest: archive.digest });
@@ -246,6 +247,8 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
         if (target.role === 'owner' && target.active && (role !== 'owner' || !active) && db.prepare("SELECT COUNT(*) n FROM account_users WHERE role='owner' AND active=1").get().n <= 1) throw new AccessError('Нельзя отключить последнего владельца');
         db.prepare('UPDATE account_users SET role=?,active=?,name=?,version=version+1 WHERE id=?').run(role, Number(active), name.trim(), id);
         db.prepare('DELETE FROM account_sessions WHERE user_id=?').run(id);
+        // A role change must never expose an accountant's raw received sum to a cashier.
+        if (workspace && (target.role !== role || !active)) db.prepare('UPDATE workspace_drafts SET fields=NULL,version=version+1,request_id=NULL,request_digest=NULL WHERE user_id=?').run(id);
         event(actor.id, 'account.updated', id, { before: publicUser(target), after: publicUser(userById(id)), reason: reason.trim() });
         return publicUser(userById(id));
       });

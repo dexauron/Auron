@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { reconcileExcel } from './worksheet.mjs';
+import { validateDraftFields, validDraftSlot } from './workspace-drafts.mjs';
 
 export const MAX_WORKSPACE_BYTES = 32 * 1024 * 1024;
 export const MAX_WORKSPACE_ROWS = 100000;
@@ -10,7 +11,8 @@ export const ARCHIVE_TABLES = {
   workspace_cash: ['id', 'version', 'shift_key', 'cashier_id', 'actor_id', 'status', 'at_ms', 'input', 'result', 'reason'],
   workspace_requests: ['id', 'digest', 'result'],
   workspace_tasks: ['id', 'version', 'creator_id', 'assignee_id', 'title', 'status', 'related_cash', 'at_ms'],
-  workspace_products: ['id', 'version', 'name', 'barcode', 'price', 'active']
+  workspace_products: ['id', 'version', 'name', 'barcode', 'price', 'active'],
+  workspace_drafts: ['id', 'user_id', 'slot', 'version', 'base_version', 'fields', 'at_ms', 'request_id', 'request_digest']
 };
 const hash = payload => createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 const exact = (v, keys) => v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
@@ -20,17 +22,18 @@ const id = v => typeof v === 'string' && /^[a-f0-9-]{36}$/.test(v);
 const clean = (v, max, blank = false) => typeof v === 'string' && (blank || v.trim().length > 0) && v.length <= max && !/[\x00-\x1f]/.test(v);
 const json = (v, max = MAX_WORKSPACE_BYTES) => { if (typeof v !== 'string' || v.length > max) fail(); try { return JSON.parse(v); } catch { fail(); } };
 export function makeWorkspaceArchive(tables, createdAt = new Date().toISOString()) {
-  const payload = { format: 'way-market-workspace', version: 1, createdAt, tables };
+  const payload = { format: 'way-market-workspace', version: 2, createdAt, tables };
   const archive = { ...payload, digest: hash(payload) };
   validateWorkspaceArchive(archive);
   return archive;
 }
 export function validateWorkspaceArchive(archive) {
-  if (!exact(archive, ['format', 'version', 'createdAt', 'tables', 'digest']) || archive.format !== 'way-market-workspace' || archive.version !== 1 || typeof archive.createdAt !== 'string' || !Number.isFinite(Date.parse(archive.createdAt)) || new Date(archive.createdAt).toISOString() !== archive.createdAt || !exact(archive.tables, Object.keys(ARCHIVE_TABLES))) fail();
+  if (!exact(archive, ['format', 'version', 'createdAt', 'tables', 'digest']) || archive.format !== 'way-market-workspace' || ![1, 2].includes(archive.version) || typeof archive.createdAt !== 'string' || !Number.isFinite(Date.parse(archive.createdAt)) || new Date(archive.createdAt).toISOString() !== archive.createdAt || !exact(archive.tables, Object.keys(ARCHIVE_TABLES).filter(t => archive.version === 2 || t !== 'workspace_drafts'))) fail();
   const { digest, ...payload } = archive;
   if (typeof digest !== 'string' || digest !== hash(payload) || Buffer.byteLength(JSON.stringify(archive)) > MAX_WORKSPACE_BYTES) fail();
   let count = 0;
   for (const [table, columns] of Object.entries(ARCHIVE_TABLES)) {
+    if (table === 'workspace_drafts' && archive.version === 1) continue;
     const rows = archive.tables[table]; if (!Array.isArray(rows)) fail(); count += rows.length;
     if (count > MAX_WORKSPACE_ROWS || rows.some(r => !exact(r, columns))) fail();
   }
@@ -79,5 +82,19 @@ export function validateWorkspaceArchive(archive) {
   for (const row of t.workspace_cash) if (!targets.has(`${row.id}:${row.version}`) || !audit.has(`cash.${row.status}:${row.id}:${row.version}`)) fail();
   for (const row of t.workspace_tasks) if (!targets.has(`${row.id}:${row.version}`) || !audit.has(`task.changed:${row.id}:${row.version}`)) fail();
   for (const row of t.workspace_products) if (!targets.has(`${row.id}:${row.version}`) || !audit.has(`product.changed:${row.id}:${row.version}`)) fail();
-  return { users: users.size, cash: cash.size, cashVersions: t.workspace_cash.length, tasks: tasks.size, products: products.size, events: events.size, createdAt: archive.createdAt };
+  const draftIds = new Set(), draftSlots = new Set(); let drafts = 0;
+  for (const d of t.workspace_drafts ?? []) {
+    const user = users.get(d.user_id), key = `${d.user_id}:${d.slot}`;
+    if (!id(d.id) || draftIds.has(d.id) || !user || !validDraftSlot(d.slot) || draftSlots.has(key) || !integer(d.version, 1) || !integer(d.base_version) || !integer(d.at_ms) || (d.request_id === null ? d.request_digest !== null : !id(d.request_id) || !/^[a-f0-9]{64}$/.test(d.request_digest))) fail();
+    draftIds.add(d.id); draftSlots.add(key);
+    if (d.fields !== null) {
+      const fields = json(d.fields, 32768); try { validateDraftFields(fields); } catch { fail(); }
+      if (!user.active || !['owner', 'accountant', 'cashier'].includes(user.role)) fail();
+      if (user.role === 'cashier' && (fields.received || (fields.cashierId && fields.cashierId !== user.id))) fail();
+      if (d.slot === 'new') { if (d.base_version !== 0) fail(); }
+      else if (!cash.get(d.slot)?.has(d.base_version) || (user.role === 'cashier' && cash.get(d.slot).get(d.base_version).cashier_id !== user.id)) fail();
+      drafts++;
+    }
+  }
+  return { users: users.size, cash: cash.size, cashVersions: t.workspace_cash.length, tasks: tasks.size, products: products.size, drafts, events: events.size, createdAt: archive.createdAt };
 }
