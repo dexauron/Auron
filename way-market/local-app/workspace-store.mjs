@@ -5,6 +5,7 @@ import { InputError, money } from './domain.mjs';
 import { reconcileExcel, defaultExcelSettings, EXCEL_FIELDS } from './worksheet.mjs';
 import { readDraft, listDrafts, writeDraft, consumeDraft } from './workspace-drafts.mjs';
 
+import { financeMethods, workspaceFinancialState } from './workspace-finance.mjs';
 import { procurementMethods } from './workspace-procurement.mjs';
 
 export class VersionError extends Error {}
@@ -39,6 +40,7 @@ export function openWorkspace(filename, options = {}) {
   return {
     accounts,
     ...procurementMethods(command, request, VersionError),
+    ...financeMethods(command, request, VersionError),
     draftList(token) { return command(token, 'cash.submit', (db, actor) => ({ cashierId: actor.id }), (db, actor) => listDrafts(db, actor)); },
     draftGet(token, slot) { return command(token, 'cash.submit', (db, actor) => ({ cashierId: actor.id }), (db, actor) => readDraft(db, actor, slot)); },
     draftSave(token, p) { return command(token, 'cash.submit', (db, actor) => ({ cashierId: actor.id }), (db, actor, audit, at) => writeDraft(db, actor, audit, at, p)); },
@@ -81,6 +83,8 @@ export function openWorkspace(filename, options = {}) {
           const id = old?.id ?? randomUUID(), version = (old?.version ?? 0) + 1;
           consumeDraft(db, actor, audit, at, p);
           db.prepare('INSERT INTO workspace_cash VALUES (?,?,?,?,?,?,?,?,?,?)').run(id, version, shiftKey, cashierId, actor.id, p.accept ? 'accepted' : 'submitted', at, JSON.stringify(input), JSON.stringify(result), reason);
+          // A recorded handover pins the actual receipt, including after later cash revisions.
+          if (old && db.prepare("SELECT 1 FROM workspace_finance WHERE kind='movement' LIMIT 1").get()) workspaceFinancialState(db);
           audit(p.accept ? 'cash.accepted' : 'cash.submitted', id, { version, cashierId, reason });
           return { id, version };
         });

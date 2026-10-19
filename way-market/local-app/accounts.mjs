@@ -31,7 +31,7 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
   // financial database, including one whose user_version is also 1.
   if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='revisions'").get()) { db.close(); throw new Error('Нужна отдельная база аккаунтов'); }
   const ownTables = new Set(['account_users', 'account_sessions', 'account_events', 'account_attempts']);
-  if (workspace) for (const name of ['workspace_cash', 'workspace_requests', 'workspace_tasks', 'workspace_products', 'workspace_drafts', 'workspace_procurement']) ownTables.add(name);
+  if (workspace) for (const name of ['workspace_cash', 'workspace_requests', 'workspace_tasks', 'workspace_products', 'workspace_drafts', 'workspace_procurement', 'workspace_finance']) ownTables.add(name);
   if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().some(t => !ownTables.has(t.name))) { db.close(); throw new Error('Нужна отдельная база аккаунтов'); }
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS account_users (
@@ -58,6 +58,7 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
     CREATE TABLE IF NOT EXISTS workspace_requests (id TEXT PRIMARY KEY, digest TEXT NOT NULL, result TEXT NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS workspace_tasks (id TEXT PRIMARY KEY, version INTEGER NOT NULL, creator_id TEXT NOT NULL, assignee_id TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, related_cash TEXT, at_ms INTEGER NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS workspace_products (id TEXT PRIMARY KEY, version INTEGER NOT NULL, name TEXT NOT NULL, barcode TEXT NOT NULL, price INTEGER NOT NULL, active INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS workspace_finance (id TEXT NOT NULL, version INTEGER NOT NULL, kind TEXT NOT NULL, actor_id TEXT NOT NULL, at_ms INTEGER NOT NULL, data TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(id,version)) STRICT;
     CREATE TABLE IF NOT EXISTS workspace_procurement (id TEXT NOT NULL, version INTEGER NOT NULL, kind TEXT NOT NULL, actor_id TEXT NOT NULL, at_ms INTEGER NOT NULL, data TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(id,version)) STRICT;
     CREATE TABLE IF NOT EXISTS workspace_drafts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, slot TEXT NOT NULL, version INTEGER NOT NULL, base_version INTEGER NOT NULL, fields TEXT, at_ms INTEGER NOT NULL, request_id TEXT, request_digest TEXT, UNIQUE(user_id,slot)) STRICT;`);
   let activeKdf = 0;
@@ -118,8 +119,8 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
       if (!workspace || !Number.isSafeInteger(maxAgeMinutes) || maxAgeMinutes < 10 || maxAgeMinutes > 10080) throw new Error('Неверная проверка запуска');
       const configured = Boolean(db.prepare("SELECT id FROM account_users WHERE active=1 AND role='owner' LIMIT 1").get());
       const rows = db.prepare("SELECT at_ms,detail FROM account_events WHERE kind='backup.completed' ORDER BY sequence DESC").all();
-      const restored = new Set(db.prepare("SELECT detail FROM account_events WHERE kind='backup.restore-checked'").all().map(r => JSON.parse(r.detail)).filter(d => ['drafts', 'suppliers', 'budgets', 'orders', 'receipts', 'reviews'].every(k => Number.isSafeInteger(d.stats?.[k]))).map(d => d.id));
-      const checked = rows.find(row => { const d = JSON.parse(row.detail); return ['drafts', 'suppliers', 'budgets', 'orders', 'receipts', 'reviews'].every(k => Number.isSafeInteger(d.stats?.[k])) && restored.has(d.id) && now() >= row.at_ms && now()-row.at_ms <= maxAgeMinutes*60000; });
+      const restored = new Set(db.prepare("SELECT detail FROM account_events WHERE kind='backup.restore-checked'").all().map(r => JSON.parse(r.detail)).filter(d => ['drafts', 'suppliers', 'budgets', 'orders', 'receipts', 'reviews', 'moneyAccounts', 'obligations', 'paymentPlans', 'moneyMovements', 'moneyCorrections', 'bankLines'].every(k => Number.isSafeInteger(d.stats?.[k]))).map(d => d.id));
+      const checked = rows.find(row => { const d = JSON.parse(row.detail); return ['drafts', 'suppliers', 'budgets', 'orders', 'receipts', 'reviews', 'moneyAccounts', 'obligations', 'paymentPlans', 'moneyMovements', 'moneyCorrections', 'bankLines'].every(k => Number.isSafeInteger(d.stats?.[k])) && restored.has(d.id) && now() >= row.at_ms && now()-row.at_ms <= maxAgeMinutes*60000; });
       return { configured, checkedCopy: checked ? JSON.parse(checked.detail) : null };
     },
     backupActor,
@@ -139,7 +140,7 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
         let total = 0;
         for (const table of Object.keys(ARCHIVE_TABLES)) total += db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n;
         if (total > MAX_WORKSPACE_ROWS) throw new InputError('База превышает лимит этого этапа резервирования');
-        const tables = Object.fromEntries(Object.keys(ARCHIVE_TABLES).map(table => [table, db.prepare(`SELECT * FROM ${table} ORDER BY ${table === 'account_events' ? 'sequence' : ['workspace_cash', 'workspace_procurement'].includes(table) ? 'id,version' : 'id'}`).all()]));
+        const tables = Object.fromEntries(Object.keys(ARCHIVE_TABLES).map(table => [table, db.prepare(`SELECT * FROM ${table} ORDER BY ${table === 'account_events' ? 'sequence' : ['workspace_cash', 'workspace_procurement', 'workspace_finance'].includes(table) ? 'id,version' : 'id'}`).all()]));
         return withMetadata ? { tables, createdAt: new Date(now()).toISOString() } : tables;
       });
     },
