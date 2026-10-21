@@ -7,6 +7,8 @@ import {createInterface} from 'node:readline/promises';
 import {startSuite} from './start.mjs';
 import {createTunnelGateway,quickOrigin} from './tunnel-gateway.mjs';
 import launcher from './launch.cjs';
+// Internet sessions end after 14 days or 3 days without use; local launch keeps sign-in until logout.
+export const TUNNEL_SESSIONS=Object.freeze({absoluteMs:14*86400000,idleMs:3*86400000});
 export const testDirectory=(platform=process.platform,env=process.env,home=homedir())=>platform==='win32'?join(env.ProgramData||home,'WayMarket-Quick-Tunnel-Test'):join(home,'.way-market-quick-tunnel-test');
 export function quickUrlFromLog(line){const value=/https:\/\/[-a-z0-9]+\.trycloudflare\.com\b/.exec(line)?.[0];return value?quickOrigin(value):null;}
 async function checkCloudflared(){
@@ -14,7 +16,7 @@ async function checkCloudflared(){
 }
 export async function main(){
  launcher.preflight();await checkCloudflared();
- const suite=await startSuite({dataDirectory:testDirectory(),port:0});let child,gateway,rl,closing=false;
+ const suite=await startSuite({dataDirectory:testDirectory(),port:0,sessions:TUNNEL_SESSIONS});let child,gateway,rl,closing=false;
  async function close(){if(closing)return;closing=true;gateway?.disable();if(child&&!child.killed)child.kill();if(gateway){gateway.server.closeAllConnections();await new Promise(r=>gateway.server.close(r));}rl?.close();await suite.close();}
  for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>{close().then(()=>process.exit(0));});
  try {

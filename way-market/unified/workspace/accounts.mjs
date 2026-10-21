@@ -26,6 +26,9 @@ function credentials(login, name, password, role) {
 }
 
 export function openAccounts(filename, { clock = Date.now, workspace = false, persistentSessions = false } = {}) {
+  // persistentSessions: true keeps sign-in until logout; { absoluteMs, idleMs } limits it (internet test).
+  const sessionLimit = persistentSessions && typeof persistentSessions === 'object' ? persistentSessions : null;
+  if (sessionLimit && ![sessionLimit.absoluteMs, sessionLimit.idleMs].every(v => Number.isSafeInteger(v) && v > 0)) throw new Error('Неверный срок сеанса');
   const db = new DatabaseSync(filename);
   if (![0, 1].includes(db.prepare('PRAGMA user_version').get().user_version)) { db.close(); throw new Error('Неподдерживаемая база аккаунтов'); }
   // Never pass cash-test.sqlite: this separate schema deliberately refuses a
@@ -90,7 +93,8 @@ export function openAccounts(filename, { clock = Date.now, workspace = false, pe
   function session(token, touch = true) {
     if (!validToken(token)) throw new AccessError('Войдите в аккаунт');
     const digest = hash(token), s = db.prepare('SELECT * FROM account_sessions WHERE digest=?').get(digest), at = now();
-    if (!s || at >= s.expires_ms || (!persistentSessions && (at < s.seen_ms || at - s.seen_ms >= idleMs))) {
+    if (!s || at >= s.expires_ms || (!persistentSessions && (at < s.seen_ms || at - s.seen_ms >= idleMs))
+      || (sessionLimit && (at < s.seen_ms || at - s.seen_ms >= sessionLimit.idleMs || at - s.created_ms >= sessionLimit.absoluteMs))) {
       db.prepare('DELETE FROM account_sessions WHERE digest=?').run(digest);
       throw new AccessError('Войдите в аккаунт');
     }
@@ -222,16 +226,21 @@ export function openAccounts(filename, { clock = Date.now, workspace = false, pe
     },
     async login({ login, password }) {
       if (typeof login !== 'string' || login.length > 64 || typeof password !== 'string' || Buffer.byteLength(password) > 512) throw failure();
-      const normalized = login.toLowerCase(), bucket = hash(normalized), at = now();
+      const normalized = login.toLowerCase(), at = now();
+      // Per-login limit for existing accounts; one shared limit only for unknown logins, so a
+      // stranger guessing names cannot lock out real staff while scrypt load stays bounded.
+      const known = Boolean(db.prepare('SELECT 1 FROM account_users WHERE login=?').get(normalized));
+      const limits = known ? [[hash(normalized), 5]] : [['unknown', 30]];
       const allowed = transaction(() => {
         db.prepare('DELETE FROM account_attempts WHERE expires_ms<=?').run(at);
-        if (persistentSessions) db.prepare('DELETE FROM account_sessions WHERE expires_ms<=?').run(at);
+        if (sessionLimit) db.prepare('DELETE FROM account_sessions WHERE expires_ms<=? OR seen_ms<=? OR created_ms<=?').run(at, at - sessionLimit.idleMs, at - sessionLimit.absoluteMs);
+        else if (persistentSessions) db.prepare('DELETE FROM account_sessions WHERE expires_ms<=?').run(at);
         else db.prepare('DELETE FROM account_sessions WHERE expires_ms<=? OR seen_ms<=?').run(at, at - idleMs);
-        for (const [key, limit] of [['all', 30], [bucket, 5]]) {
+        for (const [key, limit] of limits) {
           const count = db.prepare('SELECT count FROM account_attempts WHERE bucket=?').get(key)?.count ?? 0;
           if (count >= limit) { event(null, 'login.throttled', null); return false; }
         }
-        for (const key of ['all', bucket]) db.prepare('INSERT INTO account_attempts VALUES (?,1,?) ON CONFLICT(bucket) DO UPDATE SET count=count+1').run(key, at + 60000);
+        for (const [key] of limits) db.prepare('INSERT INTO account_attempts VALUES (?,1,?) ON CONFLICT(bucket) DO UPDATE SET count=count+1').run(key, at + 60000);
         return true;
       });
       if (!allowed) throw failure();
@@ -244,9 +253,9 @@ export function openAccounts(filename, { clock = Date.now, workspace = false, pe
           event(null, 'login.failed', u?.id ?? null); return null;
         }
         const token = randomBytes(32).toString('hex'), issued = now();
-        db.prepare('INSERT INTO account_sessions VALUES (?,?,?,?,?)').run(hash(token), u.id, issued, issued, persistentSessions ? Number.MAX_SAFE_INTEGER : issued + absoluteMs);
+        db.prepare('INSERT INTO account_sessions VALUES (?,?,?,?,?)').run(hash(token), u.id, issued, issued, persistentSessions ? (sessionLimit ? issued + sessionLimit.absoluteMs : Number.MAX_SAFE_INTEGER) : issued + absoluteMs);
         event(u.id, 'login.succeeded', u.id);
-        return { token, user: publicUser(current), expiresAt: persistentSessions ? Number.MAX_SAFE_INTEGER : issued + absoluteMs };
+        return { token, user: publicUser(current), expiresAt: persistentSessions ? (sessionLimit ? issued + sessionLimit.absoluteMs : Number.MAX_SAFE_INTEGER) : issued + absoluteMs };
       });
       if (!result) throw failure();
       return result;
