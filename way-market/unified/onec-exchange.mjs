@@ -99,7 +99,7 @@ export function parseFiles(p,input){
  const rows=raw.map((item,index)=>{const errors=[];let row={row:index+1};try{
   if(!object(item))fail('Строка должна быть объектом');const get=k=>p.format==='commerceml'?item[k]:p.columns[k]&&Object.hasOwn(item,p.columns[k])?item[p.columns[k]]:undefined;
   const externalId=text(get('externalId'),'внешний ИД',120),name=text(get('name'),'наименование');if(ids.has(externalId))fail('Повтор внешнего ИД');ids.add(externalId);
-  const rawPrice=get('price');if(typeof rawPrice!=='string'||!rawPrice.trim())fail('Цена неизвестна: нужна десятичная строка');const priceMinor=money(rawPrice,'Цена');
+  const rawPrice=get('price');if(typeof rawPrice!=='string'||!rawPrice.trim())fail('Цена неизвестна: нужна десятичная строка');const priceMinor=money(rawPrice,'Цена');if(priceMinor===0)fail('Цена 0: строка не загружается, прежняя цена не меняется');
   const currency=get('currency');if(currency!==undefined&&!rub(currency))fail('Поддерживаются только рублёвые цены');for(const k of ['currency','Currency','Валюта'])if(Object.hasOwn(item,k)&&!rub(item[k]))fail('Поддерживаются только рублёвые цены');
   const rawUnit=text(get('unit'),'единицу',30),u=unit(rawUnit);if(!['шт','кг','л','м'].includes(u))fail('Поддерживаются шт/кг/л/м; упаковки требуют пересчёта');
   let barcodes=get('barcodes')??[];if(typeof barcodes==='string')barcodes=barcodes?barcodes.split('|'):[];
