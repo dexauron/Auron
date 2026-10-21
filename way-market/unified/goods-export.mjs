@@ -2,7 +2,8 @@
 import {readFileSync} from 'node:fs';
 import {inflateRawSync} from 'node:zlib';
 import {DOCUMENT_TYPES,DOCUMENT_STATUSES} from './goods-documents.mjs';
-const escape=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'})[c]);
+// Characters outside XML 1.0 make Excel reject the whole file; show them as U+FFFD.
+const escape=v=>String(v??'').replace(/[^\t\n\r\u0020-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/gu,'\ufffd').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'})[c]);
 export function unpackZip(buffer){
  let e=buffer.length-22;while(e>=Math.max(0,buffer.length-65557)&&buffer.readUInt32LE(e)!==0x06054b50)e--;if(e<0)throw Error('Invalid XLSX template');
  let pos=buffer.readUInt32LE(e+16);const entries=new Map();
