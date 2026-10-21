@@ -128,6 +128,8 @@ export function onecExchange(w){
    const s=record(db,'stage',p.stageId);if(!s)fail('Пакет не найден');const done=record(db,'applied',s.id);if(done)return done.result;
    if(record(db,'profile',s.profileId)?.version!==s.profileVersion)throw new VersionError('Профиль изменён: проверьте пакет заново');
    if(p.confirmed!==true||s.rows.some(r=>r.errors.length))fail('Подтвердите пакет без ошибок');
+   // Stages are stored; one saved by an older version may lack today's row rules. Re-check money before any write.
+   if(s.rows.some(r=>!Number.isSafeInteger(r.priceMinor)||r.priceMinor<=0||r.price!==priceString(r.priceMinor)))fail('В пакете есть цена 0 или неверная цена: выполните новый предпросмотр');
    if(!Array.isArray(p.decisions)||p.decisions.length!==s.rows.length)fail('Нужны действия для всех строк');const decisions=new Map();
    for(const d of p.decisions){if(!object(d)||typeof d.externalId!=='string'||(!uuid(d.targetId)&&d.targetId!==null)||decisions.has(d.externalId))fail('Неверные соответствия');decisions.set(d.externalId,d.targetId);}
    const used=new Set(),result={stageId:s.id,changed:[]};
