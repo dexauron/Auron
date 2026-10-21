@@ -233,7 +233,6 @@
         "supabase/migrations/0007_attachments_profiles.sql": "a70873e1a7b1b4e55fb8b492905933bea08ec328a1461d08fa0ebd7b31b64f74",
         "supabase/tests/run.sh": "5c988dca0724375f4a597a40fc3d984ca896f4b1df879062728a97dae5edb8b8",
         "supabase/tests/state_machine_test.sql": "afe21cc7c46ebdaf22f65fa646b763f7eb56179f7bd12696e8ec0db98cd41aac",
-        "web/.env.example": "610df642dfdc7334c9f70a4c2c54c1b1d43d309ad2ebbd606f483dd1cc3f5a94",
         "web/index.html": "0bdfa0361659100931157511c1341a9d741779e30f61ac3a1f555473ea16c80b",
         "web/package-lock.json": "e4147dd51df0d89796d83fc3704a168416ea363a5814b70566b593ac75c4e2d7",
         "web/package.json": "4c9ef0c248c39355ec477e023ef2449bce40562e369bd5b913381cd96b13678a",
@@ -264,6 +263,12 @@
         "web/tsconfig.json": "ff0c468e427a20bc2fdce77449eb7fc48ee3f27262a20bce632237848f3ec7e0",
         "web/tsconfig.tsbuildinfo": "857e78d2c5f9982bc45670235e38025128400dc46c76db3ab786ba34d4b7f1ca",
         "web/vite.config.ts": "49b4744d95c3c1d75fdc755b1e47823c6911b313b348a681ba29747c1d3aec4f"
+      },
+      "withheld": {
+        "web/.env.example": {
+          "sha256": "610df642dfdc7334c9f70a4c2c54c1b1d43d309ad2ebbd606f483dd1cc3f5a94",
+          "reason": "Файл с параметрами подключения не хранится в репозитории; для локального запуска не нужен."
+        }
       }
     }
   ]
