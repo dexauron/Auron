@@ -1,0 +1,15 @@
+{
+  "name": "way-market-workspace-test",
+  "version": "0.7.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "start": "node workspace-server.mjs",
+    "start:https": "node workspace-https.mjs",
+    "test": "node --test --test-concurrency=2 workspace.test.mjs workspace-backups.test.mjs workspace-drafts.test.mjs workspace-procurement.test.mjs workspace-finance.test.mjs workspace-catalog.test.mjs catalog-search.test.mjs",
+    "test:https": "node --test workspace-network.test.mjs"
+  }
+}

@@ -1,0 +1,359 @@
+:root{--wm-shell-bg:#ffffffed;--wm-shell-ink:#20202a;--wm-shell-muted:#70707d;--wm-shell-line:#dedee8;--wm-shell-accent:#5e5ce6}body.wm-unified{padding-top:68px!important}.wm-topbar{position:fixed;inset:0 0 auto 0;height:68px;z-index:2147483600;display:flex;align-items:center;gap:22px;padding:0 24px;background:var(--wm-shell-bg);color:var(--wm-shell-ink);border-bottom:1px solid var(--wm-shell-line);font:15px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backdrop-filter:blur(18px)}.wm-topbar a{color:inherit;text-decoration:none;white-space:nowrap}.wm-wordmark{font-weight:800;letter-spacing:-.04em;font-size:23px}.wm-wordmark span{color:var(--wm-shell-accent)}.wm-modules{display:flex;gap:5px;flex:1;overflow:auto}.wm-modules a{padding:10px 14px;border-radius:12px}.wm-modules a[aria-current=page]{background:#5e5ce615;color:var(--wm-shell-accent);font-weight:700}.wm-topbar button{border:1px solid var(--wm-shell-line);padding:10px 14px;min-height:42px;border-radius:12px;background:transparent;color:inherit;font:inherit;cursor:pointer}.wm-topbar a:focus-visible,.wm-topbar button:focus-visible{outline:3px solid var(--wm-shell-accent);outline-offset:2px}.wm-profile-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wm-panel{position:fixed;z-index:2147483601;top:78px;right:16px;width:min(380px,calc(100vw - 32px));padding:24px;background:var(--wm-shell-bg);color:var(--wm-shell-ink);border:1px solid var(--wm-shell-line);border-radius:22px;box-shadow:0 16px 60px #0002;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wm-panel h2{font-size:22px;margin:0 0 20px}.wm-panel label{display:block;margin:15px 0}.wm-panel select{display:block;width:100%;padding:10px;font:inherit;border-radius:10px}.wm-panel button{padding:12px 16px;border:0;border-radius:12px;font:inherit;cursor:pointer}.wm-panel p{font-size:14px}.wm-error{color:#bd293d}html[data-wm-theme=dark]{--wm-shell-bg:#1b1b22f2;--wm-shell-ink:#f2f2f7;--wm-shell-muted:#a5a5b3;--wm-shell-line:#393944;--wm-shell-accent:#a6a5ff}html[data-wm-size=large]{font-size:19px}html[data-wm-size=large] .wm-topbar{font-size:17px}@media(max-width:650px){.wm-topbar{padding:0 12px;gap:8px}.wm-wordmark{font-size:19px}.wm-wordmark span{display:none}.wm-modules a{padding:10px 9px;font-size:14px}.wm-profile-name{max-width:58px}.wm-topbar button{padding:9px}.wm-topbar .wm-exit{display:none}}
+html[data-wm-theme=dark]{--bg:#101014;--card:#1c1c23;--card2:#25252f;--card3:#34343e;--ink:#f4f4f8;--ink2:#c8c8d0;--line:#373741}html[data-wm-theme=light]{--bg:#f3f3f8;--card:#fff;--card2:#f2f2f7;--card3:#e5e5ea;--ink:#1d1d24;--ink2:#494953;--line:#dddde8}.wm-unified .sidebar{top:68px}.wm-unified #screen-app{height:calc(100dvh - 68px)}html[data-wm-theme=dark] body.wm-unified{background:#101014;color:#f4f4f8}html[data-wm-theme=dark] .wm-unified .sidebar{background:#191920}html[data-wm-theme=dark] .wm-unified .brand{color:#f4f4f8}
+body.wm-unified .screen{top:68px!important}body.wm-unified .screen.active{bottom:0;height:calc(100dvh - 68px)}
+/* Shared application frame across all three module families. */
+.wm-unified{--wm-nav-width:238px;--wm-radius:18px;--wm-control-radius:12px;--wm-font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-family:var(--wm-font)!important;padding-left:var(--wm-nav-width)!important;background:var(--bg)!important}.wm-unified .sidebar,.wm-unified #mobile-navigation,.wm-unified #screen-app>.bottom-nav,.wm-unified #screen-app .bottom-nav{display:none!important}.wm-unified #content{margin-left:0!important;max-width:1400px;margin-right:auto;padding:28px 36px 100px}.wm-unified #content>.topline{display:none}.wm-unified #content>header h1{font-size:32px;letter-spacing:-1px}.wm-page-label{flex:1;font-size:16px;font-weight:650;letter-spacing:-.02em}.wm-topbar .wm-wordmark{width:192px;flex-shrink:0}.wm-sidebar{position:fixed;top:68px;left:0;bottom:0;width:var(--wm-nav-width);z-index:1000;display:flex;flex-direction:column;padding:22px 14px;background:var(--wm-shell-bg);border-right:1px solid var(--wm-shell-line);font:15px/1.4 var(--wm-font);color:var(--wm-shell-ink)}.wm-store-label{margin:0 14px 24px;font-size:11px;letter-spacing:.12em;font-weight:750;color:var(--wm-shell-muted)}.wm-store-label span{display:block;letter-spacing:0;font-size:18px;color:var(--wm-shell-ink);margin-top:5px}.wm-sidebar-links{display:flex;flex-direction:column;gap:5px;overflow:auto;flex:1}.wm-sidebar a{display:flex;align-items:center;gap:12px;min-height:47px;padding:12px 14px;text-decoration:none;color:inherit;border-radius:13px;font-weight:550}.wm-sidebar svg,.wm-mobile-nav svg,.wm-menu-button svg{width:22px;height:22px;flex-shrink:0}.wm-sidebar a[aria-current=page]{background:#5e5ce618;color:var(--wm-shell-accent);font-weight:700}.wm-sidebar a:hover{background:#80809010}.wm-sidebar-foot{padding:20px 14px 4px;font-size:12px;line-height:1.5;color:var(--wm-shell-muted)}.wm-sidebar a:focus-visible,.wm-mobile-nav a:focus-visible,.wm-finance-tabs button:focus-visible{outline:3px solid var(--wm-shell-accent);outline-offset:2px}.wm-menu-button,.wm-mobile-nav{display:none!important}.wm-nav-shade{display:none}.wm-unified[data-wm-module=finance] #screen-app{left:var(--wm-nav-width)!important;top:68px!important;right:0;bottom:0;padding:0!important;height:calc(100dvh - 68px)!important;flex-direction:column}.wm-unified[data-wm-module=finance] .main-area{display:flex;flex:1;min-height:0;flex-direction:column;overflow:hidden}.wm-unified[data-wm-module=finance] .app-header{display:none}.wm-unified[data-wm-module=finance] .tab-content{padding:24px 8px 32px;overflow:auto;min-height:0}.wm-unified[data-wm-module=finance] .fab{display:none!important}.wm-finance-tabs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:17px 26px;border-bottom:1px solid var(--wm-shell-line);background:var(--wm-shell-bg);font:15px/1.4 var(--wm-font)}.wm-finance-tabs button,.wm-finance-tabs a{padding:10px 14px;border-radius:12px;border:0;font:inherit;min-height:42px;background:transparent;color:var(--wm-shell-muted);text-decoration:none;cursor:pointer}.wm-finance-tabs button[aria-current=page]{background:#5e5ce616;color:var(--wm-shell-accent);font-weight:650}.wm-finance-tabs .wm-add-operation{margin-left:auto;background:#5e5ce6;color:white}.wm-unified[data-wm-module=catalog]>.header{top:68px;padding:22px 28px 0;background:var(--wm-shell-bg);border-bottom:1px solid var(--wm-shell-line)}.wm-unified[data-wm-module=catalog]>.header>.header-row{display:none}.wm-unified[data-wm-module=catalog] .content{padding:22px 28px 100px}.wm-unified #tabbar.wm-catalog-tabs{position:static!important;inset:auto!important;transform:none!important;width:100%;height:auto;display:flex;gap:4px;padding:10px 0 0;margin:0;border:0;box-shadow:none;background:transparent;backdrop-filter:none}.wm-unified .wm-catalog-tabs .tab{flex:0 1 auto;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px 16px;min-height:44px;max-width:none;border-radius:12px 12px 0 0;font-size:14px}.wm-unified .wm-catalog-tabs .tab .tab-ico{display:none}.wm-unified .wm-catalog-tabs .tab.active{background:#5e5ce612;color:var(--wm-shell-accent)}.wm-unified .account-card,.wm-unified .summary-card,.wm-unified .card,.wm-unified .entry-card{border-radius:var(--wm-radius);box-shadow:none}.wm-unified button,.wm-unified input,.wm-unified select{font-family:var(--wm-font)}.wm-unified .btn-primary,.wm-unified .primary{background:#5e5ce6!important;border-radius:var(--wm-control-radius)}.wm-unified .section-title{font-size:18px;letter-spacing:-.02em;font-weight:700}.wm-unified .sheet-backdrop,.wm-unified .sheet-overlay{z-index:2147483602}.wm-unified .sheet,.wm-unified .bottom-sheet{z-index:2147483603}.wm-unified dialog{z-index:2147483603}.wm-unified .toast{z-index:2147483605}.wm-unified[data-wm-module=catalog] .grid{gap:14px}
+@media(max-width:900px){.wm-unified{padding-left:0!important;padding-bottom:calc(76px + env(safe-area-inset-bottom))!important}.wm-topbar{height:64px;padding:0 14px}.wm-topbar .wm-wordmark{width:auto;font-size:21px}.wm-topbar .wm-wordmark span{display:none}.wm-topbar .wm-page-label{font-size:15px}.wm-menu-button{display:grid!important;place-items:center;padding:8px!important;min-width:42px}.wm-unified .wm-sidebar{top:0;bottom:0;width:min(288px,85vw);z-index:2147483603;padding-top:28px;transform:translateX(-100%);transition:transform .18s ease}.wm-sidebar.is-open{transform:translateX(0)}.wm-nav-shade:not([hidden]){display:block;position:fixed;inset:0;background:#0006;z-index:2147483602;border:0;border-radius:0;min-height:0;width:100%;padding:0}.wm-mobile-nav{display:flex!important;align-items:center;justify-content:space-around;position:fixed;inset:auto 0 0;min-height:66px;padding:6px 8px calc(6px + env(safe-area-inset-bottom));background:var(--wm-shell-bg);border-top:1px solid var(--wm-shell-line);backdrop-filter:blur(18px);z-index:2147483600;color:var(--wm-shell-muted);font:11px/1.2 var(--wm-font)}.wm-mobile-nav a,.wm-mobile-nav button{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:48px;padding:5px 6px;text-decoration:none;border:0;background:none;border-radius:10px;color:inherit;font:inherit}.wm-mobile-nav a[aria-current=page]{color:var(--wm-shell-accent);font-weight:700}.wm-unified #content{padding:23px 18px 100px!important}.wm-unified[data-wm-module=finance] #screen-app{left:0!important;top:64px!important;bottom:calc(66px + env(safe-area-inset-bottom));height:calc(100dvh - 130px - env(safe-area-inset-bottom))!important}.wm-finance-tabs{padding:12px;gap:3px}.wm-finance-tabs button,.wm-finance-tabs a{padding:9px 11px;font-size:14px}.wm-finance-tabs .wm-add-operation{margin-left:0}.wm-finance-tabs .wm-finance-link{display:none}.wm-unified[data-wm-module=finance] .tab-content{padding:16px 0 25px}.wm-unified[data-wm-module=catalog]>.header{top:64px;padding:14px 14px 0}.wm-unified[data-wm-module=catalog] .content{padding:14px 12px 80px}.wm-unified .wm-catalog-tabs .tab{padding:10px 11px;font-size:13px;min-height:42px}.wm-unified #tabbar.wm-catalog-tabs{overflow:auto;flex-wrap:nowrap}.wm-unified .wm-catalog-tabs .tab .tab-txt{white-space:nowrap}body.wm-unified{padding-top:64px!important}.wm-panel{top:72px}}
+@media(prefers-reduced-motion:reduce){.wm-unified .wm-sidebar{transition:none}}
+.wm-unified .wm-catalog-settings{margin-left:auto;padding:10px 14px;background:transparent;color:var(--wm-shell-accent);font:600 14px/1.3 var(--wm-font);white-space:nowrap;min-height:44px;border-radius:12px}.wm-unified .wm-catalog-settings:hover{background:#5e5ce612}.wm-finance-tabs button:disabled{opacity:.45;cursor:wait}@media(max-width:650px){.wm-unified .wm-catalog-settings{font-size:12px;padding:8px 10px}.wm-panel a{color:var(--wm-shell-accent)}}
+.wm-state-note{position:fixed;top:78px;right:18px;max-width:min(460px,calc(100vw - 36px));z-index:2147483606;padding:14px 18px;border:1px solid #d78d35;border-radius:14px;background:var(--wm-shell-bg);color:var(--wm-shell-ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 8px 28px #0002}.wm-panel button:disabled{opacity:.5;cursor:wait}
+
+/* Way Market 0.11 — one visual system for all module families.
+   Keep this layer after source styles. Never alter source snapshots. */
+:root {
+  --wm-font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
+  --wm-bg:#f4f5f9;
+  --wm-surface:#ffffff;
+  --wm-surface-2:#edeff5;
+  --wm-surface-3:#e0e3ed;
+  --wm-ink:#202232;
+  --wm-ink-2:#50566b;
+  --wm-muted:#636b80;
+  --wm-line:#dfe3ed;
+  --wm-accent:#514bd1;
+  --wm-accent-ink:#514bd1;
+  --wm-accent-soft:#eeedfc;
+  --wm-positive:#187347;
+  --wm-negative:#be3046;
+  --wm-warning:#875408;
+  --wm-positive-soft:#e9f6ee;
+  --wm-negative-soft:#fceef1;
+  --wm-warning-soft:#fff4df;
+  --wm-overlay:#151b3266;
+  --wm-shadow:0 18px 64px #18234320;
+  --wm-card-radius:20px;
+  --wm-control-radius:12px;
+  --wm-text-scale:1;
+  --wm-top-height:68px;
+  --wm-bottom-height:0px;
+}
+html[data-wm-theme=dark] {
+  --wm-bg:#11131b;
+  --wm-surface:#1b1f2c;
+  --wm-surface-2:#252a3a;
+  --wm-surface-3:#353d52;
+  --wm-ink:#f1f3fc;
+  --wm-ink-2:#c2c9de;
+  --wm-muted:#a4afc7;
+  --wm-line:#394158;
+  --wm-accent:#625be6;
+  --wm-accent-ink:#b8b4ff;
+  --wm-accent-soft:#302c50;
+  --wm-positive:#77d7a4;
+  --wm-negative:#ff92a3;
+  --wm-warning:#f3c47b;
+  --wm-positive-soft:#193b30;
+  --wm-negative-soft:#422630;
+  --wm-warning-soft:#3f3323;
+  --wm-overlay:#070a14a3;
+  --wm-shadow:0 18px 64px #0005;
+}
+/* Bridge every source vocabulary; body values also win over legacy root themes. */
+:root, body.wm-unified, #entry {
+  --bg:var(--wm-bg);--surface:var(--wm-surface);--surface-2:var(--wm-surface-2);--surface-3:var(--wm-surface-3);
+  --card:var(--wm-surface);--card2:var(--wm-surface-2);--card3:var(--wm-surface-3);
+  --ink:var(--wm-ink);--text:var(--wm-ink);--ink2:var(--wm-ink-2);--text-2:var(--wm-muted);--muted:var(--wm-muted);
+  --line:var(--wm-line);--border:var(--wm-line);--blue:var(--wm-accent-ink);
+  --brand:var(--wm-accent);--brand-ink:var(--wm-accent-ink);--accent:var(--wm-accent);
+  --green:var(--wm-positive);--pos:var(--wm-positive);--red:var(--wm-negative);--neg:var(--wm-negative);--danger:var(--wm-negative);--warn:var(--wm-warning);
+  --radius:var(--wm-card-radius);--r:var(--wm-card-radius);--radius-sm:var(--wm-control-radius);--r-sm:var(--wm-control-radius);
+  --radius-xs:8px;--r-xs:8px;--font:var(--wm-font);--shadow:var(--wm-shadow);
+  --wm-shell-bg:var(--wm-surface);--wm-shell-ink:var(--wm-ink);--wm-shell-muted:var(--wm-muted);--wm-shell-line:var(--wm-line);--wm-shell-accent:var(--wm-accent-ink);
+}
+/* Explicit root theme selectors beat the sources' equally specific theme rules. */
+html[data-wm-theme] {
+  --bg:var(--wm-bg);--card:var(--wm-surface);--card2:var(--wm-surface-2);--card3:var(--wm-surface-3);
+  --surface:var(--wm-surface);--surface-2:var(--wm-surface-2);--surface-3:var(--wm-surface-3);
+  --ink:var(--wm-ink);--ink2:var(--wm-ink-2);--text:var(--wm-ink);--text-2:var(--wm-muted);--muted:var(--wm-muted);--line:var(--wm-line);--border:var(--wm-line);
+  --brand-ink:var(--wm-accent-ink);--wm-shell-bg:var(--wm-surface);--wm-shell-ink:var(--wm-ink);--wm-shell-muted:var(--wm-muted);--wm-shell-line:var(--wm-line);--wm-shell-accent:var(--wm-accent-ink);
+}
+html[data-wm-size=large] {--wm-text-scale:1.15}
+body.wm-unified, #entry {font-family:var(--wm-font);color:var(--wm-ink);background:var(--wm-bg);-webkit-font-smoothing:antialiased;line-height:1.45}
+body.wm-unified {padding-top:var(--wm-top-height)!important}
+.wm-unified :is(button,input,select,textarea), #entry :is(button,input) {font:inherit}
+.wm-unified :is(h1,h2,h3), #entry :is(h1,h2) {color:var(--wm-ink);letter-spacing:-.035em;line-height:1.2;overflow-wrap:anywhere}
+.wm-unified #content>header h1 {font-size:calc(32px * var(--wm-text-scale));font-weight:750}
+.wm-unified :is(.section-title,.sec-title,.sheet-title) {text-transform:none;letter-spacing:-.02em;font-size:calc(18px * var(--wm-text-scale));font-weight:700;color:var(--wm-ink)}
+.wm-unified :is(.fine,.hint,.ios-note,.tx-meta,.acc-name,.summary-label,.field-key,.sheet-desc) {font-size:calc(14px * var(--wm-text-scale));line-height:1.5;color:var(--wm-muted)}
+.wm-unified :is(.money,.amount,.acc-balance,.summary-val,.tx-amount,.card-price,.debt-amount,.kassa-input) {font-variant-numeric:tabular-nums}
+.wm-unified :is(a,summary), #entry a {color:var(--wm-accent-ink)}
+.wm-unified :is(button,a,input,select,textarea,summary,[tabindex]):focus-visible, #entry :is(button,input,a):focus-visible {
+  outline:3px solid var(--wm-accent-ink);outline-offset:3px;
+}
+.wm-unified :is(button,input,select,textarea) {scroll-margin-top:calc(var(--wm-top-height) + 20px);scroll-margin-bottom:100px}
+.wm-unified :is(input,select,textarea)::placeholder, #entry input::placeholder {color:var(--wm-muted);opacity:1}
+.wm-unified :is(input,select,textarea):disabled {color:var(--wm-muted);background:var(--wm-surface-2)}
+.wm-unified :is(button,a) {touch-action:manipulation}
+/* Common surfaces, leaving table/list semantics and compact product grids intact. */
+.wm-unified :is(.surface,.metric,.card,.account-card,.summary-card,.debt-card,.cat-tile,.ios-group), #entry .entry-card {
+  background:var(--wm-surface);color:var(--wm-ink);border:1px solid var(--wm-line);border-radius:var(--wm-card-radius);box-shadow:none;
+}
+.wm-unified :is(.surface,.debt-card) {padding:24px}
+.wm-unified :is(.row,.cash-label,.pl-row,.field-row) {border-color:var(--wm-line)}
+.wm-unified :is(.row-button,.settings-item,.picker-item,.ios-row) {color:var(--wm-ink)}
+.wm-unified .row-button {background:var(--wm-surface)}
+.wm-unified :is(.row-button,.settings-item,.picker-item,.ios-row):hover {background:var(--wm-surface-2)}
+.wm-unified :is(.readonly,.cash-report,.meta-row,.kassa-row,.withdrawal-item) {background:var(--wm-surface-2);color:var(--wm-ink);border-color:var(--wm-line);border-radius:var(--wm-control-radius)}
+.wm-unified :is(.badge,.tag,.calc-tag) {background:var(--wm-surface-2);color:var(--wm-ink-2)}
+.wm-unified :is(.positive,.text-pos,.markup-ok,.calc-good) {color:var(--wm-positive)}
+.wm-unified :is(.negative,.error,.text-neg,.wm-error,.markup-loss,.calc-bad-text) {color:var(--wm-negative)}
+.wm-unified :is(.badge.ok,.tag-instock) {background:var(--wm-positive-soft);color:var(--wm-positive)}
+.wm-unified :is(.banner-warn,.backup-alert) {background:var(--wm-warning-soft);color:var(--wm-warning);border-color:var(--wm-warning)}
+.wm-unified :is(.banner-info,.banner-publish) {background:var(--wm-accent-soft);color:var(--wm-accent-ink)}
+/* Primary / secondary / destructive actions retain their original meaning. */
+.wm-unified :is(.btn,.primary,.secondary,.danger,.debt-btn,.btn-primary), #entry button {
+  min-height:46px;padding:12px 17px;border-radius:var(--wm-control-radius);font-size:calc(15px * var(--wm-text-scale));font-weight:650;line-height:1.3;
+}
+.wm-unified :is(.primary,.btn-primary), #entry .primary, .wm-finance-tabs .wm-add-operation, .wm-panel #wm-save {
+  background:var(--wm-accent)!important;color:#fff!important;border:1px solid transparent;
+}
+.wm-unified :is(.secondary,.btn-secondary,.debt-btn), .wm-panel #wm-close {background:var(--wm-surface-2);color:var(--wm-ink-2);border:1px solid var(--wm-line)}
+.wm-unified :is(.danger,.btn-danger), .wm-panel #wm-logout {background:var(--wm-negative-soft);color:var(--wm-negative);border:1px solid transparent}
+.wm-unified .btn-ghost {color:var(--wm-accent-ink)}
+.wm-unified :is(button:disabled,[aria-disabled=true]) {opacity:.5;cursor:not-allowed}
+/* Inputs are scoped: do not turn the Finance keypad or checkbox into full forms. */
+.wm-unified[data-wm-module=workspace] :is(input:not([type=checkbox]):not([type=radio]),select,textarea),
+.wm-unified[data-wm-module=catalog] :is(.input,.ios-inp), #entry input, .wm-panel select {
+  background:var(--wm-surface-2);color:var(--wm-ink);border:1px solid var(--wm-line);border-radius:var(--wm-control-radius);
+  min-height:48px;padding:12px 14px;font-size:calc(16px * var(--wm-text-scale));line-height:1.4;
+}
+.wm-unified[data-wm-module=workspace] label, #entry label {color:var(--wm-ink-2);font-size:calc(15px * var(--wm-text-scale))}
+.wm-unified[data-wm-module=workspace] .cash-label input {width:150px;text-align:right}
+.wm-unified input[aria-invalid=true], #entry input[aria-invalid=true] {border-color:var(--wm-negative)}
+/* One search treatment, including the nested Finance input. */
+.wm-unified :is(.search-input,.search-bar) {background:var(--wm-surface-2);color:var(--wm-ink);border:1px solid var(--wm-line);border-radius:var(--wm-control-radius);box-shadow:none}
+.wm-unified .search-input {font-size:calc(16px * var(--wm-text-scale));min-height:48px}
+.wm-unified .search-bar input {min-width:0;color:var(--wm-ink);font-size:calc(16px * var(--wm-text-scale));width:100%}
+.wm-unified :is(.search-wrap,.search-bar):focus-within {outline:2px solid var(--wm-accent-ink);outline-offset:2px}
+.wm-unified :is(.chip,.pill,.a-tab,.type-tab,.j-tab) {min-height:44px;font-size:calc(14px * var(--wm-text-scale))}
+.wm-unified :is(.pill,.a-tab) {background:var(--wm-surface);border:1px solid var(--wm-line);border-radius:var(--wm-control-radius);color:var(--wm-ink-2)}
+.wm-unified :is(.pill,.a-tab,.chip).active {background:var(--wm-accent-soft);color:var(--wm-accent-ink);border-color:var(--wm-accent-ink)}
+.wm-unified .type-tabs {background:var(--wm-surface-2)}
+.wm-unified .type-tab.active {background:var(--wm-surface);color:var(--wm-ink);box-shadow:0 1px 4px #0001}
+.wm-unified .j-tab.active {color:var(--wm-accent-ink);border-bottom-color:var(--wm-accent-ink)}
+/* Frame and page spacing. */
+.wm-topbar {height:var(--wm-top-height);background:var(--wm-surface);font-family:var(--wm-font)}
+.wm-topbar .wm-wordmark {font-size:23px;font-weight:800;letter-spacing:-.06em;color:var(--wm-ink)}
+.wm-topbar .wm-page-label {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:calc(16px * var(--wm-text-scale));color:var(--wm-ink-2)}
+.wm-topbar button {font-size:calc(14px * var(--wm-text-scale));background:var(--wm-surface);color:var(--wm-ink-2);border-color:var(--wm-line);min-height:44px}
+.wm-sidebar {top:var(--wm-top-height);background:var(--wm-surface);font-size:calc(15px * var(--wm-text-scale))}
+.wm-sidebar a {color:var(--wm-ink-2);min-height:48px}
+.wm-sidebar a[aria-current=page], .wm-finance-tabs button[aria-current=page], .wm-unified .wm-catalog-tabs .tab.active {background:var(--wm-accent-soft);color:var(--wm-accent-ink)}
+.wm-sidebar a:hover {background:var(--wm-surface-2)}
+.wm-unified #content {max-width:1280px;padding:32px 36px 100px}
+.wm-unified #content>header {margin-bottom:28px;align-items:center}
+.wm-unified #content>header p {font-size:calc(15px * var(--wm-text-scale));line-height:1.5}
+.wm-unified .save-bar {background:var(--wm-surface);color:var(--wm-ink);border-color:var(--wm-line);box-shadow:var(--wm-shadow)}
+/* Catalog: preserve compact/list modes, images and stock/price semantics. */
+.wm-unified[data-wm-module=catalog]>.header {background:var(--wm-bg);top:var(--wm-top-height);padding:24px 28px 0}
+.wm-unified[data-wm-module=catalog] .content {max-width:1560px;margin:0 auto;padding:24px 28px 100px}
+.wm-unified[data-wm-module=catalog] .card {overflow:hidden}
+.wm-unified[data-wm-module=catalog] .card-body {padding:14px}
+.wm-unified[data-wm-module=catalog] .card-name {font-size:calc(15px * var(--wm-text-scale));font-weight:600;line-height:1.4}
+.wm-unified[data-wm-module=catalog] .card-price {font-size:calc(21px * var(--wm-text-scale));font-weight:750;letter-spacing:-.04em;color:var(--wm-ink)}
+.wm-unified[data-wm-module=catalog] .grid.compact .card-body {padding:9px}
+.wm-unified[data-wm-module=catalog] .grid.compact .card-name {font-size:calc(13px * var(--wm-text-scale))}
+.wm-unified[data-wm-module=catalog] .grid.compact .card-price {font-size:calc(17px * var(--wm-text-scale))}
+.wm-unified[data-wm-module=catalog] .cat-tile.cat-on {background:var(--wm-accent-soft);border-color:var(--wm-accent-ink)}
+.wm-unified[data-wm-module=catalog] :is(.icon-btn,.round-btn,.round-btn-accent) {min-height:44px;min-width:44px;border-radius:var(--wm-control-radius)}
+.wm-unified .wm-catalog-tabs .tab {border-radius:var(--wm-control-radius) var(--wm-control-radius) 0 0;font-size:calc(14px * var(--wm-text-scale))}
+.wm-unified .wm-catalog-settings {color:var(--wm-accent-ink)}
+/* Finance: same canvas, no old colored card glow, one readable list hierarchy. */
+.wm-unified[data-wm-module=finance] .tab-content {background:var(--wm-bg);padding:24px 12px 36px}
+.wm-unified[data-wm-module=finance] .tab-pane {max-width:1200px;margin:0 auto}
+.wm-unified[data-wm-module=finance] .section-title {margin:24px 0 12px}
+.wm-unified[data-wm-module=finance] .account-card {width:224px;padding:20px}
+.wm-unified[data-wm-module=finance] .account-card::before {display:none}
+.wm-unified[data-wm-module=finance] .acc-balance {font-size:calc(28px * var(--wm-text-scale));font-weight:750;letter-spacing:-.04em}
+.wm-unified[data-wm-module=finance] .tx-item {padding:16px 20px;min-height:72px;border-bottom:1px solid var(--wm-line)}
+.wm-unified[data-wm-module=finance] :is(.tx-info,.settings-item-text,.meta-row-text) {min-width:0;overflow-wrap:anywhere}
+.wm-unified[data-wm-module=finance] :is(.tx-name,.settings-item-text,.meta-row-text,.picker-item-name) {font-size:calc(16px * var(--wm-text-scale))}
+.wm-unified[data-wm-module=finance] .tx-amount {font-size:calc(17px * var(--wm-text-scale));white-space:nowrap}
+.wm-unified[data-wm-module=finance] .kassa-input {min-height:44px;min-width:0;color:var(--wm-ink);font-size:calc(17px * var(--wm-text-scale))}
+.wm-unified[data-wm-module=finance] .search-bar {min-height:48px}
+.wm-unified[data-wm-module=finance] .settings-item {min-height:60px;border-bottom:1px solid var(--wm-line)}
+.wm-finance-tabs {background:var(--wm-surface);padding:16px 28px}
+.wm-finance-tabs :is(button,a) {font-size:calc(14px * var(--wm-text-scale));min-height:44px}
+/* Sheets and dialogs share surfaces; original opening/closing rules stay intact. */
+.wm-unified :is(.sheet,.bottom-sheet,dialog), .wm-panel {background:var(--wm-surface);color:var(--wm-ink);border:1px solid var(--wm-line);box-shadow:var(--wm-shadow);font-family:var(--wm-font)}
+.wm-unified :is(.sheet,.bottom-sheet) {border-radius:24px 24px 0 0}
+.wm-unified dialog {border-radius:24px;overflow:auto;max-height:calc(100dvh - 32px)}
+.wm-unified dialog::backdrop {background:var(--wm-overlay);backdrop-filter:blur(4px)}
+.wm-unified :is(.sheet-backdrop,.sheet-overlay) {background:var(--wm-overlay);backdrop-filter:blur(4px)}
+.wm-unified .sheet-handle {background:var(--wm-surface-3);width:36px;height:4px;border-radius:4px}
+.wm-panel {max-height:calc(100dvh - var(--wm-top-height) - 28px);overflow:auto;padding:24px;border-radius:24px}
+.wm-panel h2 {font-size:calc(23px * var(--wm-text-scale));letter-spacing:-.035em}
+.wm-panel :is(p,label) {font-size:calc(15px * var(--wm-text-scale))}
+.wm-panel button {min-height:44px;margin-bottom:6px;font-size:calc(15px * var(--wm-text-scale))}
+.wm-panel a {color:var(--wm-accent-ink)}
+.wm-unified .empty-state, .wm-unified .empty {color:var(--wm-muted)}
+.wm-unified :is(.toast,#notice), .wm-state-note {background:var(--wm-surface);color:var(--wm-ink);border:1px solid var(--wm-line);box-shadow:var(--wm-shadow);border-radius:var(--wm-control-radius)}
+.wm-unified #notice {top:calc(var(--wm-top-height) + 12px);z-index:2147483606}
+/* Shared entry screen is part of the same product. */
+#entry {min-height:100dvh;padding:24px}
+#entry .entry-card {padding:36px;box-shadow:var(--wm-shadow)}
+#entry .brand {color:var(--wm-ink)}
+#entry .brand span {color:var(--wm-accent-ink)}
+#entry .fine {color:var(--wm-muted)}
+#entry .error {color:var(--wm-negative)}
+@media(min-width:901px) {
+  .wm-unified[data-wm-module=finance] .sheet {left:calc(var(--wm-nav-width) + (100vw - var(--wm-nav-width))/2);right:auto;width:min(620px,calc(100vw - var(--wm-nav-width) - 48px));transform:translate(-50%,100%);border-radius:24px 24px 0 0}
+  .wm-unified[data-wm-module=finance] .sheet.open {transform:translate(-50%,0)}
+}
+@media(max-width:900px) {
+  :root {--wm-top-height:64px;--wm-bottom-height:calc(66px + env(safe-area-inset-bottom))}
+  .wm-topbar {gap:8px;padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+  .wm-topbar .wm-wordmark {font-size:21px}
+  .wm-topbar .wm-page-label {font-size:calc(14px * var(--wm-text-scale))}
+  .wm-topbar .wm-exit {display:none}
+  .wm-topbar .wm-profile-name {max-width:92px}
+  .wm-unified .wm-sidebar {top:0;padding-top:max(28px,env(safe-area-inset-top));padding-bottom:max(20px,env(safe-area-inset-bottom))}
+  .wm-mobile-nav {background:var(--wm-surface);color:var(--wm-muted);padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right))}
+  .wm-mobile-nav a {color:var(--wm-muted)}
+  .wm-mobile-nav a[aria-current=page] {color:var(--wm-accent-ink);background:var(--wm-accent-soft)}
+  .wm-unified #content {padding:24px 16px 100px!important}
+  .wm-unified #content>header h1 {font-size:calc(28px * var(--wm-text-scale))}
+  .wm-unified #content>header {align-items:flex-start;flex-wrap:wrap;gap:14px}
+  .wm-unified :is(.surface,.debt-card) {padding:20px}
+  .wm-unified[data-wm-module=catalog]>.header {top:var(--wm-top-height);padding:16px max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left))}
+  .wm-unified[data-wm-module=catalog] .content {padding:16px max(12px,env(safe-area-inset-right)) 90px max(12px,env(safe-area-inset-left))}
+  .wm-finance-tabs {padding:12px;flex-wrap:nowrap;overflow:auto;flex-shrink:0}
+  .wm-finance-tabs :is(button,a) {flex-shrink:0;white-space:nowrap}
+  .wm-unified[data-wm-module=finance] .tab-content {padding:16px 0 28px}
+  .wm-unified[data-wm-module=finance] .account-card {width:208px}
+  .wm-unified .save-bar {bottom:calc(var(--wm-bottom-height) + 12px)}
+  .wm-panel {top:calc(var(--wm-top-height) + 8px)}
+}
+@media(max-width:440px) {
+  .wm-topbar {gap:6px}
+  .wm-topbar .wm-wordmark {font-size:19px}
+  .wm-topbar .wm-profile-name {max-width:64px}
+  .wm-unified .wm-catalog-tabs .tab {padding:10px;font-size:calc(13px * var(--wm-text-scale))}
+  .wm-unified[data-wm-module=catalog] .card-body {padding:11px}
+  .wm-unified[data-wm-module=finance] .tx-item {gap:8px;padding:14px 16px;flex-wrap:wrap}
+  .wm-unified[data-wm-module=finance] .tx-info {flex:1 1 120px}
+  .wm-unified[data-wm-module=workspace] .cash-label {flex-wrap:wrap}
+  .wm-unified[data-wm-module=workspace] .cash-label input {max-width:45%}
+  #entry .entry-card {padding:28px 22px}
+}
+@media(prefers-reduced-motion:reduce) {
+  .wm-unified *, .wm-unified *::before, .wm-unified *::after {animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+@media print {
+  body.wm-unified {padding:0!important;background:#fff!important;color:#000!important}
+  .wm-unified :is(.wm-topbar,.wm-sidebar,.wm-mobile-nav,.wm-nav-shade,.wm-finance-tabs,.wm-panel,.wm-state-note,.wm-catalog-tabs) {display:none!important}
+  .wm-unified #content {margin:0!important;max-width:none;padding:0!important}
+  .wm-unified :is(.surface,.metric,.card) {background:#fff;color:#000;border-color:#bbb;box-shadow:none}
+}
+.wm-unified :is(.tag-outstock,.tag-nobarcode) {background:var(--wm-negative-soft);color:var(--wm-negative)}
+.wm-unified .tag-lowstock {background:var(--wm-warning-soft);color:var(--wm-warning)}
+.wm-calendar-page .row {flex-wrap:wrap}
+.wm-calendar-page .row-main {flex:1 1 180px}
+.wm-calendar-page .row a {min-height:44px;display:inline-flex;align-items:center;padding:8px 12px;border-radius:var(--wm-control-radius);background:var(--wm-accent-soft);font-size:15px;text-decoration:none}
+
+.wm-drawer-close{display:none}
+@media(max-width:900px){.wm-unified .wm-drawer-close{display:block;min-height:44px;margin:0 12px 16px;padding:10px 14px;border:1px solid var(--wm-line);border-radius:12px;background:var(--wm-surface-2);color:var(--wm-ink);font:600 15px var(--wm-font)}}
+
+.wm-command-notice{position:fixed;z-index:2147483599;bottom:20px;left:262px;right:24px;max-height:45vh;overflow:auto;margin:0;padding:20px;border:1px solid var(--wm-shell-line);border-radius:18px;background:var(--wm-shell-bg);color:var(--wm-shell-ink);box-shadow:0 8px 30px #0002;font:15px/1.5 var(--wm-font, sans-serif)}.wm-command-notice p{margin:8px 0;line-height:1.5}.wm-command-notice button,.wm-command-notice a{display:inline-block;margin:8px 12px 0 0}.wm-command-notice button{padding:10px 14px;border-radius:12px;border:1px solid #7776;background:transparent;color:inherit;cursor:pointer}@media(max-width:900px){.wm-command-notice{left:16px;right:16px;bottom:80px;padding:16px}}
+
+/* 0.14: operational overview, shared hierarchy, clear loading and recovery. */
+.wm-unified .wm-dashboard {max-width:1280px}
+.wm-unified .wm-welcome {display:flex;align-items:center;justify-content:space-between;gap:24px;background:linear-gradient(115deg,var(--wm-surface),var(--wm-accent-soft));padding:28px 30px}
+.wm-unified .wm-welcome h2 {font-size:clamp(25px,2.5vw,34px);margin:6px 0 10px}
+.wm-unified .wm-welcome p {margin-bottom:0}
+.wm-unified .wm-welcome .eyebrow {letter-spacing:.04em;font-size:calc(13px * var(--wm-text-scale));color:var(--wm-muted)}
+.wm-unified .wm-action-link {display:inline-flex;align-items:center;text-decoration:none;min-height:46px;padding:12px 17px;border-radius:var(--wm-control-radius);font-size:calc(15px * var(--wm-text-scale));font-weight:650}
+.wm-unified .wm-overview-metrics {display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin:0 0 24px}
+.wm-unified .wm-overview-metric {min-width:0;text-align:left;display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:22px;background:var(--wm-surface);border:1px solid var(--wm-line);border-radius:18px;color:var(--wm-ink);font-weight:400}
+.wm-unified .wm-metric-label {font-size:calc(14px * var(--wm-text-scale));color:var(--wm-ink-2)}
+.wm-unified .wm-overview-metric strong {font-size:clamp(23px,2vw,30px);letter-spacing:-.045em;font-weight:750;overflow-wrap:anywhere;line-height:1.2}
+.wm-unified .wm-overview-metric small {font-size:calc(12px * var(--wm-text-scale));color:var(--wm-muted);line-height:1.45;margin-top:auto}
+.wm-unified .wm-needs-attention strong {color:var(--wm-negative)}
+.wm-unified .wm-dashboard-columns {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:20px}
+.wm-unified .wm-dashboard-columns .surface {min-width:0}
+.wm-unified .wm-panel-heading {display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:8px}
+.wm-unified .wm-panel-heading h2 {font-size:calc(18px * var(--wm-text-scale));margin:0 0 6px}
+.wm-unified .wm-panel-heading .fine {font-size:calc(13px * var(--wm-text-scale));margin:0 0 12px}
+.wm-unified .wm-panel-heading button {font-size:calc(13px * var(--wm-text-scale));padding:10px 12px;white-space:nowrap}
+.wm-unified .wm-guided-empty {min-height:150px;display:flex;flex-direction:column;justify-content:center;padding:24px;background:var(--wm-surface-2);border-radius:14px;margin-top:14px}
+.wm-unified .wm-guided-empty strong {font-size:calc(16px * var(--wm-text-scale));color:var(--wm-ink)}
+.wm-unified .wm-guided-empty p {margin:8px 0 0;font-size:calc(14px * var(--wm-text-scale));max-width:46ch}
+.wm-unified .wm-overview-row {display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:76px;width:100%;padding:16px 0;background:transparent;border:0;border-bottom:1px solid var(--wm-line);border-radius:0;text-align:left;font-weight:400;color:var(--wm-ink)}
+.wm-unified .wm-overview-row:last-child {border-bottom:0}
+.wm-unified .wm-overview-row:hover {background:var(--wm-surface-2)}
+.wm-unified .wm-overview-row .row-main {min-width:0;overflow-wrap:anywhere}
+.wm-unified .wm-overview-row strong {display:block;font-size:calc(15px * var(--wm-text-scale));font-weight:650}
+.wm-unified .wm-overview-row small {display:block;font-size:calc(13px * var(--wm-text-scale));color:var(--wm-muted);margin-top:6px}
+.wm-unified .wm-row-value {font-size:calc(14px * var(--wm-text-scale));font-weight:650;font-variant-numeric:tabular-nums;flex-shrink:0}
+.wm-unified .wm-shortcuts {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.wm-unified .wm-shortcut {min-width:0;display:flex;gap:14px;align-items:center;min-height:92px;padding:18px;text-decoration:none;border:1px solid var(--wm-line);border-radius:14px;background:var(--wm-surface);color:var(--wm-ink)}
+.wm-unified .wm-shortcut:hover {background:var(--wm-surface-2);border-color:var(--wm-accent-ink)}
+.wm-unified .wm-shortcut>span:not(.wm-shortcut-arrow) {min-width:0;overflow-wrap:anywhere}
+.wm-unified .wm-shortcut svg {color:var(--wm-accent-ink);width:24px;height:24px;flex-shrink:0}
+.wm-unified .wm-shortcut strong {font-size:calc(15px * var(--wm-text-scale));display:block}
+.wm-unified .wm-shortcut small {display:block;color:var(--wm-muted);font-size:calc(13px * var(--wm-text-scale));line-height:1.5;margin-top:4px}
+.wm-unified .wm-shortcut-arrow {color:var(--wm-muted);margin-left:auto}
+.wm-unified .wm-data-note {font-size:calc(12px * var(--wm-text-scale));line-height:1.6;padding:0 4px}
+.wm-unified .wm-loading-state {display:flex;gap:14px;align-items:center;padding:28px;background:var(--wm-surface);border:1px solid var(--wm-line);border-radius:20px;color:var(--wm-muted)}
+.wm-unified .wm-loading-state p {margin:0}
+.wm-unified .wm-loading-dot {width:10px;height:10px;background:var(--wm-accent-ink);border-radius:50%;box-shadow:0 0 0 6px var(--wm-accent-soft);flex-shrink:0}
+.wm-unified .skip:focus {z-index:2147483607;top:12px;color:var(--wm-accent-ink);background:var(--wm-surface)}
+.wm-unified :is(.finance-page,.procurement-page) details {border-bottom:1px solid var(--wm-line)}
+.wm-unified :is(.finance-page,.procurement-page) details[open] {padding-bottom:24px}
+.wm-unified :is(.finance-page,.procurement-page) details>summary {color:var(--wm-ink);font-weight:650;line-height:1.5;padding:6px 0}
+.wm-unified :is(.finance-page,.procurement-page) details>summary::before {content:'›';display:inline-block;color:var(--wm-accent-ink);margin-right:12px;font-size:calc(24px * var(--wm-text-scale))}
+.wm-unified :is(.finance-page,.procurement-page) details[open]>summary::before {transform:rotate(90deg)}
+@media(max-width:1150px) {.wm-unified .wm-shortcuts {grid-template-columns:repeat(2,minmax(0,1fr))}.wm-unified .wm-welcome {align-items:flex-start;flex-direction:column}}
+@media(max-width:600px) {
+ .wm-unified .wm-welcome {padding:24px 20px;gap:20px}
+ .wm-unified .wm-welcome .button-row {width:100%}.wm-unified .wm-welcome .button-row>* {flex:1;justify-content:center;text-align:center}
+ .wm-unified .wm-overview-metrics {grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ .wm-unified .wm-overview-metric {padding:16px;gap:12px}.wm-unified .wm-overview-metric strong {font-size:calc(24px * var(--wm-text-scale))}
+ .wm-unified .wm-shortcuts {grid-template-columns:1fr}.wm-unified .wm-shortcut {min-height:80px}
+ .wm-unified .wm-panel-heading {flex-wrap:wrap}.wm-unified .wm-overview-row {flex-wrap:wrap;gap:10px}
+ .wm-unified .wm-row-value {max-width:100%;overflow-wrap:anywhere}.wm-unified .wm-metric-label {font-size:calc(13px * var(--wm-text-scale))}
+}
+@media(max-width:340px) {.wm-unified .wm-overview-metrics {grid-template-columns:1fr}}
+
+/* 0.15: lists and account summaries share the same visual grammar. */
+.wm-unified .wm-list-heading {display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:24px}
+.wm-unified .wm-list-heading h2 {margin:0;font-size:calc(21px * var(--wm-text-scale))}
+.wm-unified .wm-list-toolbar {display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;padding:18px;background:var(--wm-surface-2);border-radius:16px}
+.wm-unified .wm-list-search {margin:0;flex:1 1 260px;gap:8px;font-size:calc(13px * var(--wm-text-scale))}
+.wm-unified[data-wm-module=workspace] .wm-list-search input {background:var(--wm-surface);width:100%}
+.wm-unified .wm-status-filters {display:flex;align-items:center;flex-wrap:wrap;gap:6px;max-width:100%}
+.wm-unified .wm-status-filter {background:transparent;border:1px solid transparent;border-radius:10px;min-height:44px;padding:10px 12px;color:var(--wm-ink-2);font-size:calc(14px * var(--wm-text-scale));font-weight:600}
+.wm-unified .wm-status-filter[aria-pressed=true] {background:var(--wm-surface);border-color:var(--wm-accent-ink);color:var(--wm-accent-ink);box-shadow:0 1px 3px #00000008}
+.wm-unified .wm-list-count {font-size:calc(13px * var(--wm-text-scale));margin:18px 0 6px}
+.wm-unified .wm-list-scope {font-size:calc(12px * var(--wm-text-scale));margin:18px 0 0;padding-top:14px;border-top:1px solid var(--wm-line)}
+.wm-unified .wm-task-row .row-main {flex:1 1 200px}
+.wm-unified .wm-task-row .badge {font-size:calc(12px * var(--wm-text-scale));flex-shrink:0}
+.wm-unified .wm-status-open {background:var(--wm-accent-soft);color:var(--wm-accent-ink)}
+.wm-unified .wm-cash-row {gap:20px;padding:20px 4px}
+.wm-unified .wm-cash-row .badge {font-size:calc(13px * var(--wm-text-scale))}
+.wm-unified .wm-account-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:14px}
+.wm-unified .wm-account-summary {min-width:0;display:flex;align-items:flex-start;flex-direction:column;gap:12px;padding:22px;background:var(--wm-surface-2);color:var(--wm-ink);border:1px solid var(--wm-line);border-radius:16px;text-align:left;font-weight:400}
+.wm-unified .wm-account-caption {display:flex;gap:10px;align-items:center;color:var(--wm-muted)}
+.wm-unified .wm-account-caption .fine {font-size:calc(13px * var(--wm-text-scale))}
+.wm-unified .wm-account-name {font-size:calc(16px * var(--wm-text-scale));overflow-wrap:anywhere;line-height:1.4}
+.wm-unified .wm-account-balance {font-size:calc(27px * var(--wm-text-scale));font-weight:750;overflow-wrap:anywhere;line-height:1.3;letter-spacing:-.04em}
+.wm-unified .wm-account-summary small {font-size:calc(12px * var(--wm-text-scale));color:var(--wm-muted);margin-top:auto;line-height:1.5}
+.wm-unified .wm-guided-empty .secondary {margin-top:16px;align-self:flex-start}
+@media(max-width:700px) {
+ .wm-unified .wm-list-toolbar {padding:14px;gap:16px}.wm-unified .wm-list-search {flex-basis:100%}
+ .wm-unified .wm-task-row {flex-wrap:wrap}.wm-unified .wm-task-row .row-main {flex-basis:100%}
+ .wm-unified .wm-task-row>button {margin-left:auto}.wm-unified .wm-cash-row {flex-wrap:wrap}
+ .wm-unified .wm-cash-row .row-main {flex:1 1 100%}.wm-unified .wm-status-filter {padding:10px}
+}
+
+html[data-wm-theme] {background:var(--wm-bg)}

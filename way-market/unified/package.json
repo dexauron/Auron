@@ -1,0 +1,17 @@
+{
+  "name": "way-market-unified-test",
+  "version": "0.17.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "start": "node launch.cjs",
+    "test": "node --test --test-concurrency=2 unified.test.mjs client-state.test.mjs order-integration.test.mjs audit-regression.test.mjs cash-integration.test.mjs commands-integration.test.mjs login-start.test.mjs overview.test.mjs list-controls.test.mjs request-id.test.mjs tunnel.test.mjs onec-exchange.test.mjs",
+    "test:workspace": "npm --prefix workspace test",
+    "dev": "node preview.mjs",
+    "test:launch": "node --test launch.test.mjs",
+    "test:tunnel": "node tunnel-test.mjs"
+  }
+}
