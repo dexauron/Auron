@@ -1,3 +1,5 @@
+import {goodsDocuments} from './goods-documents.mjs';
+import {goodsWorkbook} from './goods-export.mjs';
 import {onecExchange} from './onec-exchange.mjs';
 import {InputError} from './workspace/domain.mjs';
 import {unifiedCommands,financeDevice} from './unified-commands.mjs';
@@ -11,6 +13,7 @@ import {resolve,relative,extname} from 'node:path';
 import {AccessError} from './workspace/access.mjs';
 const MIME={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.png':'image/png','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.webp':'image/webp','.jpg':'image/jpeg','.enc':'application/octet-stream'};
 export function createUnifiedExtension(root,data,workspace){
+ const goods=workspace?goodsDocuments(workspace):null;
  const onec=workspace?onecExchange(workspace):null;
  const orders=workspace?unifiedOrderMethods(workspace):null;
  const commands=workspace?unifiedCommands(workspace,data):null;
@@ -58,6 +61,22 @@ export function createUnifiedExtension(root,data,workspace){
  };
  return async ctx=>{
   const {req,path,actor,token,url,payload,send}=ctx;
+  if(goods&&path.startsWith('/api/unified/goods')){
+   if(req.method==='GET'&&path==='/api/unified/goods'){send(200,goods.list(token));return true;}
+   if(req.method==='GET'&&path==='/api/unified/goods/products'){send(200,goods.products(token,url.searchParams.get('q')||''));return true;}
+   const match=/^\/api\/unified\/goods\/documents\/([a-f0-9-]{36})(?:\/(history|export|contract))?$/.exec(path);
+   if(req.method==='GET'&&match){
+    const [,id,action]=match;
+    if(action==='history')send(200,goods.history(token,id));
+    else if(action==='export'||action==='contract'){
+     const v=url.searchParams.get('version'),version=v&&/^\d+$/.test(v)?Number(v):null,envelope=goods.export(token,id,version);
+     if(action==='contract')send(200,envelope);
+     else{const bytes=goodsWorkbook(envelope);ctx.res.writeHead(200,{...ctx.headers,'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Content-Disposition':'attachment; filename="'+envelope.document.number+'.xlsx"'});ctx.res.end(bytes);}
+    }else send(200,goods.get(token,id));return true;
+   }
+   const action={'/api/unified/goods/save':'save','/api/unified/goods/transition':'transition','/api/unified/goods/articles':'saveArticles'}[path];
+   if(req.method==='POST'&&action){send(200,goods[action](token,payload));return true;}
+  }
   if(onec&&path.startsWith('/api/unified/1c')){
    if(req.method==='GET'&&path==='/api/unified/1c'){send(200,onec.state(token));return true;}
    if(req.method==='GET'&&path.startsWith('/api/unified/1c/stages/')){send(200,onec.stage(token,path.slice('/api/unified/1c/stages/'.length)));return true;}

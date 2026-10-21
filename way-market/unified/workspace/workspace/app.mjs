@@ -17,7 +17,7 @@ import { normalizeAmount } from '/amount.mjs';
 const $ = id => document.getElementById(id);
 const node = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
 const roles = { owner: 'Владелец', administrator: 'Администратор', accountant: 'Бухгалтер', cashier: 'Кассир', employee: 'Сотрудник', representative: 'Представитель' };
-const icons = { onec:'M4 6h16v12H4z M7 9h10 M7 12h6', home: 'M3 10l9-7 9 7v11h-6v-7H9v7H3z', cash: 'M3 5h18v14H3z M3 9h18 M7 14h3', tasks: 'M8 6h13 M8 12h13 M8 18h13 M2 6l1 1 2-2 M2 12l1 1 2-2 M2 18l1 1 2-2', products: 'M3 7l9-4 9 4-9 4z M3 7v10l9 4 9-4V7 M12 11v10', users: 'M16 21v-3a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v3 M9 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M18 4a4 4 0 0 1 0 7 M22 21v-3a4 4 0 0 0-3-4', security: 'M12 2l9 4v6c0 6-9 10-9 10S3 18 3 12V6z M8 12l3 3 5-6' };
+const icons = { goods:'M6 3h12v18H6z M9 8h6 M9 12h6 M9 16h4', onec:'M4 6h16v12H4z M7 9h10 M7 12h6', home: 'M3 10l9-7 9 7v11h-6v-7H9v7H3z', cash: 'M3 5h18v14H3z M3 9h18 M7 14h3', tasks: 'M8 6h13 M8 12h13 M8 18h13 M2 6l1 1 2-2 M2 12l1 1 2-2 M2 18l1 1 2-2', products: 'M3 7l9-4 9 4-9 4z M3 7v10l9 4 9-4V7 M12 11v10', users: 'M16 21v-3a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v3 M9 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M18 4a4 4 0 0 1 0 7 M22 21v-3a4 4 0 0 0-3-4', security: 'M12 2l9 4v6c0 6-9 10-9 10S3 18 3 12V6z M8 12l3 3 5-6' };
 const svg = key => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), p = document.createElementNS(s.namespaceURI, 'path'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('aria-hidden', 'true'); p.setAttribute('d', icons[key]); s.append(p); return s; };
 const button = (title, fn, cls = 'secondary') => { const b = node('button', title, cls); b.type = 'button'; b.addEventListener('click', fn); return b; };
 const rub = n => n == null ? '—' : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB' }).format(n / 100);
@@ -108,6 +108,7 @@ async function checkSession(force = false) {
 }
 function buildNavigation() {
   const pages = [['home', 'Главная'], ...(canCash() ? [['cash', 'Касса']] : []), ['tasks', 'Задачи'], ['products', 'Каталог']];
+  if (user.role !== 'representative') pages.push(['goods', 'Возвраты и списания']);
   if (managesCash()) pages.push(['procurement', 'Закупки'], ['finance', 'Финансы']);
   if (user.role === 'owner') pages.push(['users', 'Сотрудники'], ['security', 'История'], ['onec', 'Обмен с 1С']);
   if (user.role === 'owner' && capabilities.backups) pages.push(['backups', 'Резервные копии']);
@@ -121,6 +122,7 @@ const titles = { home: ['Главная', 'Главное для вашей ра
 titles.calendar=['Календарь','Платежи, закупки и поставки в одном расписании.'];
 titles.finance = ['Финансы', 'Счета, долги, назначения и фактические расчёты.'];
 titles.procurement = ['Закупки', 'Поставщики, лимиты, заказы и приёмка.'];
+titles.goods=['Возвраты и списания','Товары, статьи, причины и документы для 1С.'];
 titles.onec=['Обмен с 1С','Профили, проверка файлов и обновление каталога.'];
 titles.backups = ['Резервные копии', 'Зашифрованные копии и проверка восстановления.'];
 async function render(page = current, force = false, syncRoute = true) {
@@ -135,7 +137,7 @@ async function render(page = current, force = false, syncRoute = true) {
   for (const b of document.querySelectorAll('[data-page]')) { b.classList.toggle('active', b.dataset.page === page); b.setAttribute('aria-current', b.dataset.page === page ? 'page' : 'false'); }
   const loading = node('div', null, 'wm-loading-state'); loading.setAttribute('role', 'status'); loading.append(node('span', '', 'wm-loading-dot'), node('p', 'Загружаем рабочие данные…')); $('page').setAttribute('aria-busy', 'true'); $('page').replaceChildren(loading);
   try {
-    const content = await ({ home: homePage, cash: cashPage, tasks: tasksPage, products: productsPage, users: usersPage, security: securityPage, backups: backupsPage, onec:async()=>(await import('/unified/onec-page.js')).onecPage({api,node,button,surface,modal,formSubmit,rub,onDirty:value=>{dirty=value;}}), procurement: procurementPage, finance: financePage, calendar:()=>unifiedCalendarPage({api,node,select,surface,rub}) })[page]();
+    const content = await ({ home: homePage, cash: cashPage, tasks: tasksPage, products: productsPage, users: usersPage, security: securityPage, backups: backupsPage, goods:async()=>(await import('/unified/goods-page.js')).goodsPage({api,node,button,surface,modal,formSubmit,user,onDirty:value=>{dirty=value;}}), onec:async()=>(await import('/unified/onec-page.js')).onecPage({api,node,button,surface,modal,formSubmit,rub,onDirty:value=>{dirty=value;}}), procurement: procurementPage, finance: financePage, calendar:()=>unifiedCalendarPage({api,node,select,surface,rub}) })[page]();
     if (version !== renderVersion || !user) return;
     $('page').removeAttribute('aria-busy'); $('page').replaceChildren(content); window.scrollTo(0, 0);
   } catch (error) { if (version === renderVersion && user) { $('page').removeAttribute('aria-busy'); const failed = surface('Не удалось загрузить раздел'); failed.setAttribute('role', 'alert'); failed.append(node('p', error.message, 'error'), button('Повторить загрузку', () => render(page, true), 'primary')); $('page').replaceChildren(failed); } }
