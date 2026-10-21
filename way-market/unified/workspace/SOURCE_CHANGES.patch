@@ -1,0 +1,989 @@
+diff --git a/docs/WAY_MARKET_BACKUPS_STAGE.md b/docs/WAY_MARKET_BACKUPS_STAGE.md
+index 1f74f88..ef5c225 100644
+--- a/docs/WAY_MARKET_BACKUPS_STAGE.md
++++ b/docs/WAY_MARKET_BACKUPS_STAGE.md
+@@ -1,3 +1,7 @@
++# Обновление TEST 0.7
++
++Текущий архив v5 включает также таблицу `workspace_catalog`: группы, профили товаров, соответствия поставщиков, все версии и аудит. Читаются v1–v4 с пустыми отсутствующими таблицами. Старые товары после восстановления не публикуются автоматически. HTTPS требует свежей копии с проверенным восстановлением и текущими данными каталога. Прежний формат не подходит для отката уже обновлённой базы: используйте отдельную базу из прежней копии. Ниже сохранено описание первоначального этапа.
++
+ # Way Market — резервирование рабочей области TEST 0.2
+ 
+ 18.10.2026. Реализован отдельный этап [сводного ТЗ](WAY_MARKET_MASTER_SPEC.md). Это не завершение всех модулей и не разрешение на эксплуатацию с реальными данными. Старые приложения, старая кассовая база и сервер владельца не изменялись.
+diff --git a/docs/WAY_MARKET_CATALOG_STAGE.md b/docs/WAY_MARKET_CATALOG_STAGE.md
+new file mode 100644
+index 0000000..e2ed0cd
+--- /dev/null
++++ b/docs/WAY_MARKET_CATALOG_STAGE.md
+@@ -0,0 +1,31 @@
++# Way Market — каталог TEST 0.7
++
++19.10.2026. Отдельный этап разработки поверх финансов TEST 0.6. Все семь направлений остаются открытыми; см. WAY_MARKET_SEVEN_TASKS_STATUS.md. Исходные приложения не меняются, реальные данные не импортируются автоматически.
++
++## Карточки
++
++Владелец/администратор ведёт группы с вложенностью до восьми уровней, название, розничную цену, код кассы, артикул, бренд, базовую единицу (шт/кг/л/м), весовой признак, наличие, описание, массу/объём, жирность. Упаковка содержит явно заданное количество базовых единиц с точностью до 0,001; несколько штрихкодов могут обозначать разные упаковки. Масса/объём одной товарной единицы не подменяет количество единиц в коробке. Весовой товар требует единицу кг. Нельзя задать явный размер/жирность, противоречащие указанным в названии.
++
++Штрихкод хранится строкой, ведущие нули сохраняются. Дубли новых штрихкодов и действующих кодов кассы блокируются. Старые неоднозначные штрихкоды без расширенного профиля допускаются для постепенного перехода с предупреждением; поиск не выдаёт такое совпадение за однозначное. Изменение существующей карточки требует причины и текущей версии; запись основной карточки, профиля, аудита и результата повторной команды атомарна. Старый API `/api/products` сохраняет прежние шесть полей и расширенные данные при редактировании.
++
++## Поиск и соответствия
++
++Поиск выполняется локально, без облачной модели и платного API. Поддерживаются отдельные словоформы, одна опечатка, ошибочная раскладка и транслитерация; примеры: «молко», «vjkjrj», «moloko». Запрос «молоко 0,9 л в наличии до 100 рублей» сочетает название, размер, явно отмеченное наличие и предел цены. Это набор ограниченных правил, а не понимание произвольного языка.
++
++Владелец/бухгалтер выбирает поставщика и вставляет название из документа. Исходная строка хранится без изменения пробелов, кавычек и пунктуации; для поиска создаётся отдельный нормализованный ключ. Предлагаются похожие товары с основаниями и предупреждениями. Баллы сходства не являются вероятностью правильности. Различия массы/объёма/жирности уменьшают рейтинг даже при совпавшем штрихкоде или прежнем соответствии; неизвестные признаки и неоднозначные коды также показываются явно.
++
++Автоматического принятия и пересчёта нет. Человек проверяет товар и единицу/упаковку, затем явно подтверждает соответствие; сервер проверяет актуальные версии товара и поставщика. Память раздельна для поставщиков, может быть отключена с причиной. Активная связь не позволяет незаметно удалить связанную упаковку. История и исходное название сохраняются. Сопоставление пока вызывается вручную и не является готовым импортом накладной.
++
++## Розничная витрина
++
++`/shop` доступна без аккаунта, но только через уже разрешённый адрес/сетевой режим сервера. Это не публикация в интернете и не обход ограничений HTTPS/IP. Новые и восстановленные старые товары скрыты по умолчанию. Владелец/администратор отдельно включает розничную карточку. Архивный/скрытый товар исчезает из следующего ответа витрины.
++
++Сервер выдаёт только разрешённые розничные поля: название, цена, группа, бренд, единица, наличие, описание, масса/объём и жирность. Коды кассы, артикулы, штрихкоды, соответствия поставщиков, авторы/причины, касса и финансы не входят в ответ. Браузер не загружает эти данные для последующего скрытия.
++
++Покупатель составляет список в памяти открытой страницы, меняет количество и копирует текст с предварительным итогом. Штучные количества целые, для кг/л/м допускаются три дробных знака. Цена и наличие требуют подтверждения магазином; список не создаёт заказ, резерв, долг или оплату. После перезагрузки список исчезает. WhatsApp/номер магазина и отправка сообщений не подключены.
++
++## Копии и границы
++
++Архив v5 включает группы, профили, соответствия, их версии, аудит и ключи повторов. При восстановлении проверяются связи и история, создаётся отдельная база без сеансов. Читаются v1–v4 с пустыми отсутствующими таблицами. Сетевой запуск требует новой проверенной копии с каталогом.
++
++Ещё нужны фото/вложения, сканирование камерой, проверяемая миграция исходного каталога и файловый импорт, заказы покупателей, WhatsApp, испытание большого каталога/Windows/Safari и реальных устройств магазина. Нет offline PWA, автосохранения форм и облачного ИИ. Тестовые данные вымышленные; готовность к промышленной эксплуатации не заявляется.
+diff --git a/docs/WAY_MARKET_HTTPS_STAGE.md b/docs/WAY_MARKET_HTTPS_STAGE.md
+index b7c5b6a..2dd3be5 100644
+--- a/docs/WAY_MARKET_HTTPS_STAGE.md
++++ b/docs/WAY_MARKET_HTTPS_STAGE.md
+@@ -1,8 +1,8 @@
+-# Way Market — ограниченный HTTPS TEST 0.4 / 0.5 / 0.6
++# Way Market — ограниченный HTTPS TEST 0.4 / 0.5 / 0.6 / 0.7
+ 
+ 19.10.2026. Следующий этап поверх PR #48 (`655476e807709b9a8c438a5d87aea4b659e5c76d`). Сетевой режим подготовлен кодом; на AURON-SERVER автоматически не установлен. Обычный запуск остаётся `127.0.0.1:3211`. Остальные бизнес-модули этим этапом не завершаются.
+ 
+-Обновление TEST 0.6: имя новой папки — `Way-Market-Workspace-Test-0.6`; сетевой запуск требует свежей копии с проверенным восстановлением, учитывающей закупки и финансы (архив v4). Уже созданные конфигурация и сертификаты не заменяются автоматически. После обновления код новой папки также должен пройти проверку ACL.
++Обновление TEST 0.7: имя новой папки — `Way-Market-Workspace-Test-0.7`; сетевой запуск требует свежей копии с проверенным восстановлением, учитывающей закупки, финансы и каталог (архив v5). Уже созданные конфигурация и сертификаты не заменяются автоматически. После обновления код новой папки также должен пройти проверку ACL.
+ 
+ ## Реализация
+ 
+@@ -23,10 +23,10 @@ Windows-проверка ACL требует закрыть базу, TLS-фай
+ 
+ ## Windows: порядок подготовки
+ 
+-1. Распаковать TEST 0.6 отдельно. Обычным локальным запуском создать владельца, проверить данные, создать копию и проверить отдельное восстановление. Остановить сервер.
++1. Распаковать TEST 0.7 отдельно. Обычным локальным запуском создать владельца, проверить данные, создать копию и проверить отдельное восстановление. Остановить сервер.
+ 2. `prepare-workspace-https-test.cmd` запускает мастер. Он проверяет, что `192.168.1.132` назначен серверу (ServerIp допускает другое частное значение), запрашивает IP устройств и отдельный пароль PFX. ACL меняются **только** у тестового каталога WayMarket-Workspace-Test и текущей распакованной папки приложения: текущий пользователь, SYSTEM и администраторы сохраняют полный доступ, остальные локальные пользователи теряют прямой доступ. Записи базы и исходные приложения не переписываются.
+ 
+-   Папка распакованной сборки должна сохранить имя `Way-Market-Workspace-Test-0.6`: мастер отказывается менять ACL корня диска, общей родительской папки или произвольно выбранного каталога. Junctions/ссылки также отклоняются.
++   Папка распакованной сборки должна сохранить имя `Way-Market-Workspace-Test-0.7`: мастер отказывается менять ACL корня диска, общей родительской папки или произвольно выбранного каталога. Junctions/ссылки также отклоняются.
+ 3. Мастер создаёт новый каталог TLS, закрытый неэкспортируемый ключ центра в CurrentUser/My, сертификат сервера, зашифрованный PFX и открытые сертификаты. Центр действует год, серверный сертификат — 90 дней. Существующая конфигурация не заменяется. Для обновления нужно отдельное имя ConfigFileName и повторная проверка доверия.
+ 4. Передавать разрешённым устройствам **только trust-root.cer**. Независимо сверить SHA256 с сервером. Такой центр расширяет доверие устройства к выданным им сертификатам: устанавливать только на управляемые устройства, закрытый ключ хранить на сервере. PFX, пароль и базу сотрудникам не передавать. На iPhone вручную установленному центру отдельно включается полное доверие; обход предупреждения Safari этого не заменяет. Windows-клиенту также требуется доверие проверенному корневому сертификату.
+ 5. `start-workspace-https-test.cmd` проверяет ACL, копию/восстановление и TLS, запрашивает пароль и слушает выбранный HTTPS-адрес. Скрипты не отключают политику PowerShell: при запрете неподписанных сценариев нужен разрешённый администратором способ или подпись.
+diff --git a/docs/WAY_MARKET_SEVEN_TASKS_STATUS.md b/docs/WAY_MARKET_SEVEN_TASKS_STATUS.md
+index 9c674aa..6c8049d 100644
+--- a/docs/WAY_MARKET_SEVEN_TASKS_STATUS.md
++++ b/docs/WAY_MARKET_SEVEN_TASKS_STATUS.md
+@@ -1,17 +1,17 @@
+ # Way Market — остаток семи направлений
+ 
+-19.10.2026, TEST 0.6. Реестр выполнения, не обещание общей готовности. Предыдущее «могу закончить все 7» означает цель разработки, а не подтверждение завершения.
++19.10.2026, TEST 0.7. Реестр выполнения, не обещание общей готовности. Предыдущее «могу закончить все 7» означает цель разработки, а не подтверждение завершения.
+ 
+ | Направление | Уже есть в рабочей области | Что ещё нужно для приёмки |
+ |---|---|---|
+ | 1. Доступ с устройств | Отдельный HTTPS-запуск, список разрешённых IP, Windows-скрипты сертификатов/ACL/firewall | Испытание на AURON-SERVER и телефонах, подтверждение изоляции гостевой сети, отдельное защищённое решение удалённого доступа |
+-| 2. Каталог | Ручные товары, штрихкод, розничная цена, ссылки товаров в заказах | Интеграция исходного каталога: фото, группы, упаковки, несколько штрихкодов, наличие, публичная проекция, список покупателя/WhatsApp |
++| 2. Каталог | Группы, карточки/версии, упаковки, несколько штрихкодов, наличие, локальный поиск, подтверждаемые соответствия поставщиков, розничная проекция и список покупателя | Проверяемая миграция исходных данных, фото, камера/сканирование, WhatsApp, клиентский заказ, нагрузочные и пользовательские испытания |
+ | 3. Закупки | Поставщики → лимиты → заказы/резерв → частичная/финальная приёмка → разбор расхождений, версии/архив | Заявки, согласования, профили закупщика/кладовщика, автоматический перенос лимита, складской эффект, авансы, возвраты/корректировки, договоры/вложения/претензии |
+ | 4. Финансы и персонал | Сдача/приём кассы, счета и остатки, журнал денег/переводы, долги по накладным, назначения/частичные оплаты, корректировки, ручная сверка банка, отчёт по счетам | Импорт банка и сверка эквайринга, распределение платежа по нескольким накладным, авансы/статьи расходов/подотчёт, табель/начисления/зарплатные выплаты, независимые согласования |
+ | 5. Кабинеты и согласования | Личные аккаунты, серверные роли, собственные кассы/задачи | Кабинет ТП с назначением поставщика, объектные и временные права, двухсторонние подтверждения, уведомления и согласования |
+-| 6. Импорт и аналитика | Отдельные проверяемые библиотеки импорта/расчётов в репозитории | Подключение в рабочую область, предпросмотр/сопоставление/дубли, реальные обезличенные образцы файлов 1С/Excel, определения отсутствующих KPI, отчёты и проверяемые рекомендации |
++| 6. Импорт и аналитика | Отдельные проверяемые библиотеки импорта/расчётов в репозитории | Подключение файлового импорта в рабочую область, предпросмотр/дубли (ручное сопоставление названий поставщиков уже есть), реальные обезличенные образцы файлов 1С/Excel, определения отсутствующих KPI, отчёты и проверяемые рекомендации |
+ | 7. Эксплуатация | Локальные аккаунты/сеансы, ограничения входа, смена пароля, шифрованные копии и проверка восстановления, личные серверные черновики | Восстановление доступа владельца, управление устройствами, автозапуск с безопасным хранением секрета, обновление/откат, копия на отдельном носителе, Windows/Safari/нагрузочные испытания |
+ 
+ Ни одна строка не объявлена полностью закрытой. Тестовые сценарии подтверждают только перечисленное реализованное поведение. Остаток согласованного расширенного ТЗ описан в WAY_MARKET_MASTER_SPEC.md; семь направлений группируют его, но не заменяют.
+ 
+-Подробности последнего этапа: [финансы TEST 0.6](WAY_MARKET_FINANCE_STAGE.md). Ни один финансовый платёж не исполняется через банк: приложение фиксирует введённый оператором факт, без подключения к банковскому API.
++Подробности последнего этапа: [каталог TEST 0.7](WAY_MARKET_CATALOG_STAGE.md); [финансы TEST 0.6](WAY_MARKET_FINANCE_STAGE.md). Ни один финансовый платёж не исполняется через банк: приложение фиксирует введённый оператором факт, без подключения к банковскому API.
+diff --git a/docs/WAY_MARKET_WORKSPACE_STAGE.md b/docs/WAY_MARKET_WORKSPACE_STAGE.md
+index 8526941..a1f673b 100644
+--- a/docs/WAY_MARKET_WORKSPACE_STAGE.md
++++ b/docs/WAY_MARKET_WORKSPACE_STAGE.md
+@@ -1,3 +1,7 @@
++# Обновление 19.10.2026: TEST 0.7
++
++Добавлены [расширенные карточки, локальный поиск, сопоставления поставщиков и розничная витрина](WAY_MARKET_CATALOG_STAGE.md). Резервные копии v5 включают версии каталога и память соответствий. Витрина `/shop` доступна без входа только в пределах уже разрешённого сетевого доступа; публикация каждого товара включается отдельно. [Остаток семи направлений](WAY_MARKET_SEVEN_TASKS_STATUS.md). Ниже сохранена история предыдущих этапов.
++
+ # Обновление 19.10.2026: TEST 0.6
+ 
+ Добавлены [счета, долги, назначения, частичные оплаты, корректировки и ручная сверка банка](WAY_MARKET_FINANCE_STAGE.md). [Текущий остаток семи направлений](WAY_MARKET_SEVEN_TASKS_STATUS.md). Ниже сохранена история этапов.
+diff --git a/way-market/audit/workspace-browser-check.mjs b/way-market/audit/workspace-browser-check.mjs
+index 08b020e..6085027 100644
+--- a/way-market/audit/workspace-browser-check.mjs
++++ b/way-market/audit/workspace-browser-check.mjs
+@@ -11,14 +11,17 @@ const { chromium } = require('playwright');
+ const launch = () => chromium.launch({ headless: true, ...(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {}), ...(process.env.WAY_BROWSER_SINGLE_PROCESS ? { args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process', '--no-zygote'] } : {}) });
+ const password = 'Длинная тестовая фраза для входа';
+ const snapshots = process.argv[2]; if (snapshots) await mkdir(snapshots, { recursive: true });
+-let passed = 0;
++let passed = 0, scenarioIndex = 0;
+ async function scenario(name, viewport, run) {
++  if (++scenarioIndex <= Number(process.env.WAY_BROWSER_AFTER ?? 0)) return;
+   if (process.env.WAY_BROWSER_SCENARIO && !name.includes(process.env.WAY_BROWSER_SCENARIO)) return;
++  if (process.env.WAY_BROWSER_SKIP && name.includes(process.env.WAY_BROWSER_SKIP)) return;
+   const folder = await mkdtemp(join(tmpdir(), 'way-browser-backups-')), w = openWorkspace(':memory:');
+   const backupService = createBackupService(w, { directory: join(folder, 'backups'), restoreDirectory: join(folder, 'restored') });
+   const { server, setupCode } = createWorkspaceServer(w, { backupService });
+   await new Promise(r => server.listen(0, '127.0.0.1', r));
+   const browser = await launch(), ctx = await browser.newContext({ viewport }), page = await ctx.newPage(), errors = [];
++  page.setDefaultTimeout(120000);
+   page.on('pageerror', error => errors.push(error.message)); page.on('dialog', d => d.accept());
+   const base = `http://127.0.0.1:${server.address().port}`;
+   const login = async (login = 'owner') => { await page.goto(base); await page.locator('#login-form [name=login]').fill(login); await page.locator('#login-form [name=password]').fill(password); await page.locator('#login-button').click(); await page.locator('#app').waitFor({ state: 'visible' }); await page.getByRole('heading', { name: 'С чего начать', exact: true }).waitFor(); };
+@@ -277,4 +280,25 @@ await scenario('Bank statement reconciliation and correction of manual source at
+   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+   if (snapshots) await page.screenshot({ path: `${snapshots}/bank-reconciliation-390.png`, fullPage: true });
+ });
++for (const width of [1440, 390, 320]) await scenario(`Catalog groups, packs, matching, public list and no overflow at ${width}px`, {width,height:960}, async ({w,page,login,nav,base})=>{
++ await w.accounts.bootstrapOwner({login:'owner',name:'Владелец',password});const owner=await w.accounts.login({login:'owner',password});
++ w.procurementSave(owner.token,{kind:'supplier',name:'Тестовый поставщик',contact:'',terms:'',active:true,expectedVersion:0,requestId:crypto.randomUUID()});
++ await login();await nav('Каталог').click();const dialog=page.locator('#modal');
++ await page.getByRole('button',{name:'Группы',exact:true}).click();await dialog.getByRole('button',{name:'Добавить группу',exact:true}).click();await dialog.locator('[name=name]').fill('Молочное');await dialog.getByRole('button',{name:'Сохранить',exact:true}).click();await dialog.waitFor({state:'hidden'});
++ await page.getByRole('button',{name:'Добавить товар',exact:true}).click();
++ for(const [name,value]of Object.entries({name:'Молоко 900мл 2,5%',price:'99,90',barcode:'000123456789',cashCode:'PRIVATE-CASH',article:'PRIVATE-ARTICLE',sizeValue:'900',fat:'2,5'}))await dialog.locator(`[name=${name}]`).fill(value);
++ await dialog.locator('[name=groupId]').selectOption({label:'Молочное'});await dialog.locator('[name=sizeKind]').selectOption('volume');await dialog.locator('[name=availability]').selectOption('available');await dialog.locator('[name=published]').selectOption('yes');
++ await dialog.getByRole('button',{name:'Добавить упаковку',exact:true}).click();await dialog.locator('[name=packLabel]').fill('Коробка 12');await dialog.locator('[name=packQuantity]').fill('12');await dialog.getByRole('button',{name:'Добавить штрихкод',exact:true}).click();await dialog.locator('[name=extraBarcode]').fill('000123456790');await dialog.locator('[name=barcodePackageId]').selectOption({label:'Коробка 12'});
++ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
++ await dialog.getByRole('button',{name:'Сохранить товар',exact:true}).click();await dialog.waitFor({state:'hidden'});
++ const p=w.catalog(owner.token,{all:true}).products[0];assert.equal(p.profile.packages[0].quantity,12000);assert.equal(p.profile.barcodes[1].packageId,p.profile.packages[0].id);
++ await page.getByRole('searchbox',{name:'Поиск товара',exact:true}).fill('молоко 0,9 л в наличии до 100 рублей');await page.getByRole('button',{name:p.name,exact:true}).click();await dialog.getByText('Коробка 12: 12 шт',{exact:true}).waitFor();await page.locator('#modal-close').click();
++ await page.getByRole('button',{name:'Сопоставить название',exact:true}).click();const raw='  МОЛОКО "Поставщик" 900мл 2,5%  ';await dialog.locator('[name=sourceName]').fill(raw);await dialog.getByRole('button',{name:'Найти варианты',exact:true}).click();await dialog.getByRole('button',{name:'Проверить и выбрать',exact:true}).click();await dialog.locator('[name=packageId]').selectOption({label:'Коробка 12 = 12 шт'});await dialog.locator('[name=confirmed]').selectOption('yes');await dialog.getByRole('button',{name:'Сохранить',exact:true}).click();await dialog.waitFor({state:'hidden'});assert.equal(w.catalogAliases(owner.token)[0].data.sourceName,raw);
++ if(snapshots)await page.screenshot({path:`${snapshots}/catalog-${width}.png`,fullPage:true});
++ await page.goto(base+'/shop');await page.locator('#products').getByText(p.name,{exact:true}).waitFor();await page.locator('#search').fill('молко');await page.getByRole('button',{name:'В список',exact:true}).click();await page.getByRole('textbox',{name:'Количество '+p.name,exact:true}).fill('2');await page.locator('#total').getByText(/199,80/).waitFor();
++ const retail=await page.evaluate(async()=>JSON.stringify(await(await fetch('/api/shop/catalog')).json()));assert.equal(retail.includes('PRIVATE-'),false);assert.equal(retail.includes('Поставщик'),false);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);
++ if(snapshots)await page.screenshot({path:`${snapshots}/shop-${width}.png`,fullPage:true});
++ await page.reload();await page.locator('#products').getByText(p.name,{exact:true}).waitFor();assert.equal(await page.locator('#list input').count(),0);
++});
++
+ console.log(`Workspace browser scenarios passed: ${passed}`);
+diff --git a/way-market/local-app/Prepare-WorkspaceHttps.ps1 b/way-market/local-app/Prepare-WorkspaceHttps.ps1
+index c83f52d..70b10ac 100644
+--- a/way-market/local-app/Prepare-WorkspaceHttps.ps1
++++ b/way-market/local-app/Prepare-WorkspaceHttps.ps1
+@@ -12,12 +12,12 @@ if ($ClientIp.Count -lt 1 -or $ClientIp.Count -gt 32 -or @($ClientIp | Select-Ob
+ if ($ConfigFileName -notmatch '^[a-zA-Z0-9._-]+\.json$') { throw 'Choose a simple JSON configuration filename.' }
+ $DataDir = Join-Path $env:ProgramData 'WayMarket-Workspace-Test'
+ $AppDir = $PSScriptRoot
+-if ((Split-Path -Leaf $AppDir) -ne 'Way-Market-Workspace-Test-0.6') { throw 'Extract the release into its own Way-Market-Workspace-Test-0.6 folder. Never run ACL preparation from a drive root, user folder or shared application parent.' }
++if ((Split-Path -Leaf $AppDir) -ne 'Way-Market-Workspace-Test-0.7') { throw 'Extract the release into its own Way-Market-Workspace-Test-0.7 folder. Never run ACL preparation from a drive root, user folder or shared application parent.' }
+ $ConfigFile = Join-Path $DataDir $ConfigFileName
+ if (-not (Test-Path -LiteralPath (Join-Path $DataDir 'workspace-test.sqlite'))) { throw 'First create the owner and test data using start-workspace-test.cmd.' }
+ if (Test-Path -LiteralPath $ConfigFile) { throw 'Configuration already exists. Nothing was overwritten; choose another ConfigFileName for renewal.' }
+ if (Get-NetTCPConnection -State Listen -LocalPort 3211,3443 -ErrorAction SilentlyContinue) { throw 'Stop the workspace servers on ports 3211 and 3443 first.' }
+-if (-not (Test-Path -LiteralPath (Join-Path $AppDir 'workspace-https.mjs'))) { throw 'Run from the extracted TEST 0.6 application folder.' }
++if (-not (Test-Path -LiteralPath (Join-Path $AppDir 'workspace-https.mjs'))) { throw 'Run from the extracted TEST 0.7 application folder.' }
+ Write-Host "Protecting ONLY the test data and this application: $DataDir ; $AppDir"
+ Write-Host 'No router, firewall, certificate trust store or Windows service will be changed.'
+ function Protect-Path([string]$Path) {
+diff --git a/way-market/local-app/access.mjs b/way-market/local-app/access.mjs
+index 9c3eb70..038e3cc 100644
+--- a/way-market/local-app/access.mjs
++++ b/way-market/local-app/access.mjs
+@@ -2,12 +2,12 @@
+ // never from request fields, a display name, or a browser role selector.
+ const actions = new Set(['cash.read', 'cash.submit', 'cash.accept', 'cash.correct',
+   'cash.settings', 'archive.manage', 'accounts.manage', 'security.read', 'workspace.read',
+-  'tasks.read', 'tasks.create', 'tasks.update', 'catalog.read', 'catalog.manage', 'backup.manage', 'procurement.read', 'procurement.manage', 'procurement.budget', 'finance.read', 'finance.manage', 'finance.accounts', 'finance.correct']);
++  'tasks.read', 'tasks.create', 'tasks.update', 'catalog.read', 'catalog.manage', 'backup.manage', 'procurement.read', 'procurement.manage', 'procurement.budget', 'finance.read', 'finance.manage', 'finance.accounts', 'finance.correct', 'catalog.match']);
+ export function permitted(principal, action, resource = {}) {
+   if (!principal?.id || !principal.active || !actions.has(action)) return false;
+   if (principal.role === 'owner') return true;
+   if (['workspace.read', 'catalog.read', 'tasks.read', 'tasks.update'].includes(action)) return ['administrator', 'accountant', 'cashier', 'employee', 'representative'].includes(principal.role);
+-  if (['procurement.read', 'procurement.manage', 'finance.read', 'finance.manage'].includes(action)) return principal.role === 'accountant';
++  if (['procurement.read', 'procurement.manage', 'finance.read', 'finance.manage', 'catalog.match'].includes(action)) return principal.role === 'accountant';
+   if (action === 'tasks.create') return ['administrator', 'accountant'].includes(principal.role);
+   if (action === 'catalog.manage') return principal.role === 'administrator';
+   if (principal.role === 'accountant') return ['cash.read', 'cash.submit', 'cash.accept', 'cash.correct', 'cash.settings', 'archive.manage'].includes(action);
+diff --git a/way-market/local-app/accounts.mjs b/way-market/local-app/accounts.mjs
+index b92a035..e134c6c 100644
+--- a/way-market/local-app/accounts.mjs
++++ b/way-market/local-app/accounts.mjs
+@@ -1,3 +1,4 @@
++import { workspacePublicCatalog } from './workspace-catalog.mjs';
+ // Account foundation. The new workspace server uses the optional shared business
+ // transaction; the legacy cash HTTP server remains separate. LAN stays disabled.
+ import { DatabaseSync } from 'node:sqlite';
+@@ -31,7 +32,7 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
+   // financial database, including one whose user_version is also 1.
+   if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='revisions'").get()) { db.close(); throw new Error('Нужна отдельная база аккаунтов'); }
+   const ownTables = new Set(['account_users', 'account_sessions', 'account_events', 'account_attempts']);
+-  if (workspace) for (const name of ['workspace_cash', 'workspace_requests', 'workspace_tasks', 'workspace_products', 'workspace_drafts', 'workspace_procurement', 'workspace_finance']) ownTables.add(name);
++  if (workspace) for (const name of ['workspace_cash', 'workspace_requests', 'workspace_tasks', 'workspace_products', 'workspace_drafts', 'workspace_procurement', 'workspace_finance', 'workspace_catalog']) ownTables.add(name);
+   if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().some(t => !ownTables.has(t.name))) { db.close(); throw new Error('Нужна отдельная база аккаунтов'); }
+   db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
+     CREATE TABLE IF NOT EXISTS account_users (
+@@ -58,6 +59,7 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
+     CREATE TABLE IF NOT EXISTS workspace_requests (id TEXT PRIMARY KEY, digest TEXT NOT NULL, result TEXT NOT NULL) STRICT;
+     CREATE TABLE IF NOT EXISTS workspace_tasks (id TEXT PRIMARY KEY, version INTEGER NOT NULL, creator_id TEXT NOT NULL, assignee_id TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, related_cash TEXT, at_ms INTEGER NOT NULL) STRICT;
+     CREATE TABLE IF NOT EXISTS workspace_products (id TEXT PRIMARY KEY, version INTEGER NOT NULL, name TEXT NOT NULL, barcode TEXT NOT NULL, price INTEGER NOT NULL, active INTEGER NOT NULL) STRICT;
++    CREATE TABLE IF NOT EXISTS workspace_catalog (id TEXT NOT NULL, version INTEGER NOT NULL, kind TEXT NOT NULL, actor_id TEXT NOT NULL, at_ms INTEGER NOT NULL, data TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(id,version)) STRICT;
+     CREATE TABLE IF NOT EXISTS workspace_finance (id TEXT NOT NULL, version INTEGER NOT NULL, kind TEXT NOT NULL, actor_id TEXT NOT NULL, at_ms INTEGER NOT NULL, data TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(id,version)) STRICT;
+     CREATE TABLE IF NOT EXISTS workspace_procurement (id TEXT NOT NULL, version INTEGER NOT NULL, kind TEXT NOT NULL, actor_id TEXT NOT NULL, at_ms INTEGER NOT NULL, data TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(id,version)) STRICT;
+     CREATE TABLE IF NOT EXISTS workspace_drafts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, slot TEXT NOT NULL, version INTEGER NOT NULL, base_version INTEGER NOT NULL, fields TEXT, at_ms INTEGER NOT NULL, request_id TEXT, request_digest TEXT, UNIQUE(user_id,slot)) STRICT;`);
+@@ -114,13 +116,14 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
+     return publicUser(current);
+   }
+   return {
++    publicCatalog() { if (!workspace) throw new AccessError(); return transaction(() => workspacePublicCatalog(db)); },
+     // Trusted startup diagnostic, never exposed as an HTTP endpoint.
+     networkReadiness(maxAgeMinutes) {
+       if (!workspace || !Number.isSafeInteger(maxAgeMinutes) || maxAgeMinutes < 10 || maxAgeMinutes > 10080) throw new Error('Неверная проверка запуска');
+       const configured = Boolean(db.prepare("SELECT id FROM account_users WHERE active=1 AND role='owner' LIMIT 1").get());
+       const rows = db.prepare("SELECT at_ms,detail FROM account_events WHERE kind='backup.completed' ORDER BY sequence DESC").all();
+-      const restored = new Set(db.prepare("SELECT detail FROM account_events WHERE kind='backup.restore-checked'").all().map(r => JSON.parse(r.detail)).filter(d => ['drafts', 'suppliers', 'budgets', 'orders', 'receipts', 'reviews', 'moneyAccounts', 'obligations', 'paymentPlans', 'moneyMovements', 'moneyCorrections', 'bankLines'].every(k => Number.isSafeInteger(d.stats?.[k]))).map(d => d.id));
+-      const checked = rows.find(row => { const d = JSON.parse(row.detail); return ['drafts', 'suppliers', 'budgets', 'orders', 'receipts', 'reviews', 'moneyAccounts', 'obligations', 'paymentPlans', 'moneyMovements', 'moneyCorrections', 'bankLines'].every(k => Number.isSafeInteger(d.stats?.[k])) && restored.has(d.id) && now() >= row.at_ms && now()-row.at_ms <= maxAgeMinutes*60000; });
++      const restored = new Set(db.prepare("SELECT detail FROM account_events WHERE kind='backup.restore-checked'").all().map(r => JSON.parse(r.detail)).filter(d => ['drafts', 'suppliers', 'budgets', 'orders', 'receipts', 'reviews', 'moneyAccounts', 'obligations', 'paymentPlans', 'moneyMovements', 'moneyCorrections', 'bankLines', 'catalogGroups', 'catalogProfiles', 'catalogAliases'].every(k => Number.isSafeInteger(d.stats?.[k]))).map(d => d.id));
++      const checked = rows.find(row => { const d = JSON.parse(row.detail); return ['drafts', 'suppliers', 'budgets', 'orders', 'receipts', 'reviews', 'moneyAccounts', 'obligations', 'paymentPlans', 'moneyMovements', 'moneyCorrections', 'bankLines', 'catalogGroups', 'catalogProfiles', 'catalogAliases'].every(k => Number.isSafeInteger(d.stats?.[k])) && restored.has(d.id) && now() >= row.at_ms && now()-row.at_ms <= maxAgeMinutes*60000; });
+       return { configured, checkedCopy: checked ? JSON.parse(checked.detail) : null };
+     },
+     backupActor,
+@@ -140,7 +143,7 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
+         let total = 0;
+         for (const table of Object.keys(ARCHIVE_TABLES)) total += db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n;
+         if (total > MAX_WORKSPACE_ROWS) throw new InputError('База превышает лимит этого этапа резервирования');
+-        const tables = Object.fromEntries(Object.keys(ARCHIVE_TABLES).map(table => [table, db.prepare(`SELECT * FROM ${table} ORDER BY ${table === 'account_events' ? 'sequence' : ['workspace_cash', 'workspace_procurement', 'workspace_finance'].includes(table) ? 'id,version' : 'id'}`).all()]));
++        const tables = Object.fromEntries(Object.keys(ARCHIVE_TABLES).map(table => [table, db.prepare(`SELECT * FROM ${table} ORDER BY ${table === 'account_events' ? 'sequence' : ['workspace_cash', 'workspace_procurement', 'workspace_finance', 'workspace_catalog'].includes(table) ? 'id,version' : 'id'}`).all()]));
+         return withMetadata ? { tables, createdAt: new Date(now()).toISOString() } : tables;
+       });
+     },
+diff --git a/way-market/local-app/catalog-data.mjs b/way-market/local-app/catalog-data.mjs
+new file mode 100644
+index 0000000..fe3bc5d
+--- /dev/null
++++ b/way-market/local-app/catalog-data.mjs
+@@ -0,0 +1,56 @@
++import { InputError } from './domain.mjs';
++export const CATALOG_KINDS = ['group', 'profile', 'alias'];
++export const catalogId = v => typeof v === 'string' && /^[a-f0-9-]{36}$/.test(v);
++export const catalogNorm = s => String(s ?? '').normalize('NFKC').toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/[.,](?=\d)/g, '.').replace(/[^\p{L}\p{N}.]+/gu, ' ').trim().replace(/\s+/g, ' ');
++const exact = (v, keys) => v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
++const text = (v, max, blank = false) => typeof v === 'string' && (blank || v.trim().length > 0) && v.length <= max && !/[\x00-\x1f]/.test(v);
++const integer = (v, min = 0, max = 999999999) => Number.isSafeInteger(v) && v >= min && v <= max;
++const optionalId = v => v === null || catalogId(v);
++const bad = message => { throw new InputError(message ?? 'Проверьте карточку каталога и связи'); };
++export function defaultProductProfile(barcode = '') { return { groupId: null, article: '', cashCode: '', brand: '', unit: 'шт', weighted: false, barcodes: barcode ? [{ code: barcode, packageId: null }] : [], packages: [], availability: 'unknown', published: false, description: '', sizeKind: 'none', sizeValue: 0, fat: null }; }
++export function validateCatalogDocument(kind, d) {
++  if (kind === 'group') {
++    if (!exact(d, ['name', 'parentId', 'active']) || !text(d.name, 100) || d.name !== d.name.trim() || !optionalId(d.parentId) || typeof d.active !== 'boolean') bad();
++  } else if (kind === 'profile') {
++    if (!exact(d, Object.keys(defaultProductProfile())) || !optionalId(d.groupId) || !text(d.article, 60, true) || !text(d.cashCode, 40, true) || !text(d.brand, 100, true) || !['шт', 'кг', 'л', 'м'].includes(d.unit) || typeof d.weighted !== 'boolean' || !['unknown', 'available', 'unavailable'].includes(d.availability) || typeof d.published !== 'boolean' || !text(d.description, 1000, true) || !['none', 'mass', 'volume'].includes(d.sizeKind) || !integer(d.sizeValue) || (d.sizeKind === 'none' ? d.sizeValue !== 0 : d.sizeValue < 1) || (d.fat !== null && !integer(d.fat, 0, 10000))) bad();
++    if (d.weighted && d.unit !== 'кг') bad('Весовой товар должен иметь базовую единицу кг');
++    if (!Array.isArray(d.packages) || d.packages.length > 20 || !Array.isArray(d.barcodes) || d.barcodes.length > 20) bad();
++    const packages = new Set(), labels = new Set(), codes = new Set();
++    for (const p of d.packages) { const key = catalogNorm(p?.label); if (!exact(p, ['id', 'label', 'quantity']) || !catalogId(p.id) || packages.has(p.id) || !text(p.label, 50) || labels.has(key) || !integer(p.quantity, 1)) bad(); packages.add(p.id); labels.add(key); }
++    for (const b of d.barcodes) { if (!exact(b, ['code', 'packageId']) || typeof b.code !== 'string' || !/^\d{1,32}$/.test(b.code) || codes.has(b.code) || !optionalId(b.packageId) || (b.packageId !== null && !packages.has(b.packageId))) bad('Проверьте штрихкоды и их упаковки'); codes.add(b.code); }
++  } else if (kind === 'alias') {
++    if (!exact(d, ['supplierId', 'sourceName', 'productId', 'packageId', 'active']) || !catalogId(d.supplierId) || !text(d.sourceName, 300) || !catalogNorm(d.sourceName) || !catalogId(d.productId) || !optionalId(d.packageId) || typeof d.active !== 'boolean') bad();
++  } else bad();
++  return d;
++}
++export function catalogState(rows, products, suppliers) {
++  const docs = rows.map(r => ({ id: r.id, version: r.version, kind: r.kind, actorId: r.actor_id, at: r.at_ms, reason: r.reason, data: validateCatalogDocument(r.kind, JSON.parse(r.data)) }));
++  const groups = docs.filter(d => d.kind === 'group'), profiles = new Map(docs.filter(d => d.kind === 'profile').map(d => [d.id, d])), aliases = docs.filter(d => d.kind === 'alias');
++  const groupMap = new Map(groups.map(g => [g.id, g])), productMap = new Map(products.map(p => [p.id, p])), siblings = new Set(), barcodes = new Map(), cashCodes = new Set(), aliasKeys = new Set(), warnings = [];
++  for (const g of groups) {
++    const key = JSON.stringify([g.data.parentId, catalogNorm(g.data.name)]); if (siblings.has(key)) bad('Такая группа уже существует'); siblings.add(key);
++    let cur = g, seen = new Set(); while (cur) { if (seen.has(cur.id) || seen.size >= 8) bad('Цикл или слишком глубокая вложенность групп'); seen.add(cur.id); if (cur.data.parentId === null) break; const parent = groupMap.get(cur.data.parentId); if (!parent || (g.data.active && !parent.data.active)) bad('Родительская группа недоступна'); cur = parent; }
++  }
++  for (const p of profiles.values()) if (!productMap.has(p.id) || p.version !== productMap.get(p.id).version) bad('Версия карточки не соответствует товару');
++  const enriched = products.map(p => {
++    const profile = profiles.get(p.id)?.data ?? defaultProductProfile(p.barcode);
++    const group = profile.groupId === null ? null : groupMap.get(profile.groupId);
++    if (profile.groupId !== null && (!group || (p.active && !group.data.active))) bad('Товар связан с недоступной группой');
++    if ((profile.barcodes[0]?.code ?? '') !== p.barcode) bad('Основной штрихкод не соответствует карточке');
++    for (const b of profile.barcodes) { if (barcodes.has(b.code) && barcodes.get(b.code) !== p.id) { if (profiles.has(p.id) || profiles.has(barcodes.get(b.code))) bad('Штрихкод уже связан с другим товаром'); warnings.push(`Старые товары имеют общий штрихкод ${b.code}; требуется проверка`); } barcodes.set(b.code, p.id); }
++    if (p.active && profile.cashCode) { const key = catalogNorm(profile.cashCode); if (cashCodes.has(key)) bad('Код кассы уже используется'); cashCodes.add(key); }
++    return { ...p, profile };
++  });
++  for (const a of aliases) {
++    const p = productMap.get(a.data.productId), profile = profiles.get(a.data.productId)?.data;
++    if (!p || !suppliers.some(s => s.id === a.data.supplierId) || (a.data.active && a.data.packageId !== null && !profile?.packages.some(p => p.id === a.data.packageId))) bad('Сопоставление ссылается на недоступный товар или упаковку');
++    if (a.data.active) { const key = JSON.stringify([a.data.supplierId, catalogNorm(a.data.sourceName)]); if (aliasKeys.has(key)) bad('Название этого поставщика уже сопоставлено'); aliasKeys.add(key); }
++  }
++  return { groups, products: enriched, aliases, warnings: [...new Set(warnings)] };
++}
++export function publicCatalogView(state) {
++  const products = state.products.filter(p => p.active && p.profile.published).map(p => ({ id: p.id, name: p.name, price: p.price, groupId: p.profile.groupId, brand: p.profile.brand, unit: p.profile.unit, availability: p.profile.availability, description: p.profile.description, sizeKind: p.profile.sizeKind, sizeValue: p.profile.sizeValue, fat: p.profile.fat }));
++  const needed = new Set(products.map(p => p.groupId).filter(Boolean)), groups = new Map(state.groups.map(g => [g.id, g]));
++  for (const id of [...needed]) { let g = groups.get(id); while (g?.data.parentId) { needed.add(g.data.parentId); g = groups.get(g.data.parentId); } }
++  return { products, groups: state.groups.filter(g => needed.has(g.id)).map(g => ({ id: g.id, name: g.data.name, parentId: g.data.parentId })) };
++}
+diff --git a/way-market/local-app/catalog-search.mjs b/way-market/local-app/catalog-search.mjs
+new file mode 100644
+index 0000000..bdbce74
+--- /dev/null
++++ b/way-market/local-app/catalog-search.mjs
+@@ -0,0 +1,82 @@
++import { catalogNorm } from './catalog-data.mjs';
++import { InputError } from './domain.mjs';
++const stop = new Set(['найди', 'найти', 'покажи', 'показать', 'мне', 'товар', 'товары', 'нужен', 'нужна', 'пожалуйста']);
++const synonyms = new Map([['молока', 'молоко'], ['йогурты', 'йогурт'], ['соки', 'сок'], ['яйца', 'яйцо'], ['яиц', 'яйцо'], ['кефира', 'кефир'], ['сахара', 'сахар']]);
++const word = w => synonyms.get(w) ?? w;
++const tokens = s => catalogNorm(s).split(' ').filter(Boolean).map(word);
++const keyboard = new Map([..."qwertyuiop[]asdfghjkl;'zxcvbnm,."].map((c, i) => [c, [...'йцукенгшщзхъфывапролджэячсмитьбю'][i]]));
++const layout = s => [...s.toLocaleLowerCase('ru')].map(c => keyboard.get(c) ?? c).join('');
++const translit = s => s.toLowerCase().replace(/shch|sch|zh|kh|ch|sh|yu|ya|yo|[a-z]/g, c => ({ shch: 'щ', sch: 'щ', zh: 'ж', kh: 'х', ch: 'ч', sh: 'ш', yu: 'ю', ya: 'я', yo: 'е', a: 'а', b: 'б', v: 'в', g: 'г', d: 'д', e: 'е', z: 'з', i: 'и', j: 'й', k: 'к', l: 'л', m: 'м', n: 'н', o: 'о', p: 'п', r: 'р', s: 'с', t: 'т', u: 'у', f: 'ф', h: 'х', c: 'к', y: 'ы', w: 'в', x: 'кс', q: 'к' }[c]));
++const decimal = s => { const [a, b = ''] = s.replace(',', '.').split('.'); return BigInt(a) * 1000n + BigInt(b.padEnd(3, '0')); };
++export function nameTraits(source) {
++  const s = String(source).toLowerCase(), sizes = [], fats = [];
++  for (const m of s.matchAll(/(\d{1,6}(?:[.,]\d{1,3})?)\s*(кг|kg|гр|г|g|мл|ml|литр(?:а|ов)?|л|l)(?![\p{L}])/gu)) {
++    const volume = /^(мл|ml|литр|л|l)/u.test(m[2]), thousand = /^(кг|kg|литр|л|l)$/u.test(m[2]) || m[2].startsWith('литр');
++    sizes.push({ kind: volume ? 'volume' : 'mass', value: Number(decimal(m[1]) * (thousand ? 1000n : 1n)) });
++  }
++  for (const m of s.matchAll(/(\d{1,3}(?:[.,]\d{1,2})?)\s*%/g)) { const n = Number(decimal(m[1]) / 10n); if (n <= 10000) fats.push(n); }
++  return { sizes, fats, pack: /(?:уп(?:аковка)?\.?\s*(?:по\s*)?(\d{1,3})|(\d{1,3})\s*шт)/u.exec(s)?.slice(1).find(Boolean) ?? null };
++}
++function near(a, b) {
++  if (a === b) return 1;
++  if (a.length >= 3 && b.startsWith(a)) return 0.86;
++  if (a.length < 4 || b.length < 4 || Math.abs(a.length - b.length) > 1) return 0;
++  // One insertion, deletion or substitution; bounded linear work per token.
++  let i = 0, j = 0, edits = 0;
++  while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; continue; } if (++edits > 1) return 0; if (a.length >= b.length) i++; if (a.length <= b.length) j++; }
++  edits += Number(i < a.length || j < b.length); return edits <= 1 ? 0.7 : 0;
++}
++function wordsOnly(s) { return s.replace(/\d{1,9}(?:[.,]\d{1,3})?\s*(?:%|кг|kg|гр|г|g|мл|ml|литр(?:а|ов)?|л|l)(?![\p{L}])/giu, ' '); }
++export function createCatalogSearch(products, groups = [], { includeInactive = false } = {}) {
++  const groupMap = new Map(groups.map(g => [g.id, g.data?.name ?? g.name]));
++  const index = products.filter(p => includeInactive || p.active !== 0 && p.active !== false).map(p => {
++    const profile = p.profile ?? p, traits = nameTraits(p.name);
++    if (profile.sizeKind && profile.sizeKind !== 'none' && profile.sizeValue) traits.sizes = [{ kind: profile.sizeKind, value: profile.sizeValue * 1000 }];
++    if (profile.fat !== null && profile.fat !== undefined) traits.fats = [profile.fat];
++    return { p, profile, traits, words: tokens(wordsOnly(`${p.name} ${profile.brand ?? ''}`)), searchWords: tokens(wordsOnly(`${p.name} ${profile.brand ?? ''} ${groupMap.get(profile.groupId) ?? ''} ${profile.description ?? ''}`)) };
++  });
++  const codeCounts = new Map();
++  for (const r of index) for (const key of [...(r.profile.barcodes ?? []).map(b => 'b:' + b.code), ...(r.profile.cashCode ? ['c:' + catalogNorm(r.profile.cashCode)] : []), ...(r.profile.article ? ['a:' + catalogNorm(r.profile.article)] : [])]) codeCounts.set(key, (codeCounts.get(key) ?? 0) + 1);
++  return function search(query, { mode = 'search', supplierId = null, aliases = [], barcode = '', limit = 50 } = {}) {
++    if (typeof query !== 'string' || query.length > 300 || /[\x00-\x1f]/.test(query) || typeof barcode !== 'string' || !/^\d{0,32}$/.test(barcode) || !['search', 'match'].includes(mode)) throw new InputError('Проверьте поисковый запрос');
++    const traits = nameTraits(query), negatives = [...query.toLocaleLowerCase('ru').matchAll(/без\s+([\p{L}]+)/gu)].map(m => word(catalogNorm(m[1]))); let text = query, maxPrice = null;
++    const price = /(?:^|\s)(?:до|дешевле)\s+(\d{1,9}(?:[.,]\d{1,2})?)\s*(?:₽|руб(?:лей|ля|ль)?\.?|р\.)(?=\s|$)/iu.exec(text);
++    if (price && mode === 'search') { maxPrice = Number(decimal(price[1]) / 10n); text = text.replace(price[0], ' '); }
++    const available = mode === 'search' && /в\s+наличии/iu.test(text); if (available) text = text.replace(/в\s+наличии/giu, ' ');
++    const variants = [text]; if (/[a-z]/i.test(text)) variants.push(layout(text), translit(text));
++    const queries = variants.map(s => tokens(wordsOnly(s)).filter(t => !stop.has(t))).filter(a => a.length > 0);
++    const exactCode = catalogNorm(query), out = [], savedAliases = new Map(aliases.filter(a => a.data.active && a.data.supplierId === supplierId && catalogNorm(a.data.sourceName) === catalogNorm(query)).map(a => [a.data.productId, a]));
++    for (const row of index) {
++      const { p, profile, traits: actual } = row;
++      if (maxPrice !== null && p.price > maxPrice || available && profile.availability !== 'available') continue;
++      const codes = profile.barcodes?.map(b => b.code) ?? [], codeMatch = (barcode && codes.includes(barcode)) || codes.includes(query.trim()) || (profile.cashCode && catalogNorm(profile.cashCode) === exactCode) || (profile.article && catalogNorm(profile.article) === exactCode);
++      const saved = mode === 'match' ? savedAliases.get(p.id) : null;
++      const words = mode === 'match' ? row.words : row.searchWords;
++      let score = 0, matched = 0, count = 0;
++      for (const q of queries) { const scores = q.map(t => Math.max(0, ...words.map(w => near(t, w)))), n = scores.filter(n => n > 0).length, value = scores.reduce((a, b) => a + b, 0) / q.length; if (value > score) { score = value; matched = n; count = q.length; } }
++      if (!codeMatch && !saved && (queries.length && (score === 0 || (mode === 'search' ? matched !== count : matched < Math.max(1, Math.ceil(count / 2)))))) continue;
++      if (!queries.length && query.trim() && !traits.sizes.length && !traits.fats.length && maxPrice === null && !available && !codeMatch && !saved) continue;
++      const reasons = [], warnings = [];
++      const matchingKey = barcode && codes.includes(barcode) ? 'b:' + barcode : codes.includes(query.trim()) ? 'b:' + query.trim() : profile.cashCode && catalogNorm(profile.cashCode) === exactCode ? 'c:' + exactCode : profile.article && catalogNorm(profile.article) === exactCode ? 'a:' + exactCode : '';
++      if (matchingKey && codeCounts.get(matchingKey) > 1) warnings.push('Код встречается у нескольких товаров; проверьте характеристики');
++      const phraseWords = tokens(`${p.name} ${profile.description ?? ''}`);
++      for (const excluded of negatives) if (!phraseWords.some((w, i) => w === 'без' && phraseWords[i + 1] === excluded)) warnings.push('Отличается условие «без ' + excluded + '»');
++      let rank = codeMatch ? 100 : saved ? 98 : Math.round(score * 88);
++      if (codeMatch) reasons.push('Совпадает код'); else if (saved) reasons.push('Ранее подтверждено для этого поставщика'); else if (score) reasons.push('Похожее наименование');
++      for (const wanted of traits.sizes) {
++        if (!actual.sizes.length) warnings.push('Размер фасовки не подтверждён');
++        else if (!actual.sizes.some(x => x.kind === wanted.kind && x.value === wanted.value)) warnings.push('Отличается масса или объём'); else reasons.push('Совпадает масса / объём');
++      }
++      for (const wanted of traits.fats) { if (!actual.fats.length) warnings.push('Жирность не подтверждена'); else if (!actual.fats.includes(wanted)) warnings.push('Отличается жирность'); else reasons.push('Совпадает жирность'); }
++      const conflicts = warnings.some(w => w.startsWith('Отличается'));
++      if (mode === 'search' && conflicts) continue;
++      if (traits.pack) warnings.push(`Проверьте смысл фасовки ${traits.pack} шт.; пересчёт не применяется автоматически`);
++      if (barcode && !codes.includes(barcode)) warnings.push('Указанный штрихкод не совпал');
++      if (conflicts) rank = Math.min(rank, 39); else if (warnings.length) rank = Math.min(rank, 69);
++      if (query.trim() === '') rank = 0;
++      out.push({ product: p, score: rank, reasons: [...new Set(reasons)], warnings: [...new Set(warnings)], aliasId: saved?.id ?? null, packageId: saved?.data?.packageId ?? null });
++    }
++    out.sort((a, b) => b.score - a.score || a.product.name.localeCompare(b.product.name, 'ru') || a.product.id.localeCompare(b.product.id));
++    return out.slice(0, Math.max(1, Math.min(100, limit)));
++  };
++}
+diff --git a/way-market/local-app/catalog-search.test.mjs b/way-market/local-app/catalog-search.test.mjs
+new file mode 100644
+index 0000000..8eb1afd
+--- /dev/null
++++ b/way-market/local-app/catalog-search.test.mjs
+@@ -0,0 +1,41 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { createCatalogSearch, nameTraits } from './catalog-search.mjs';
++import { defaultProductProfile } from './catalog-data.mjs';
++const product = (id, name, price, extras = {}) => ({ id, name, price, active: 1, profile: { ...defaultProductProfile(), ...extras } });
++const products = [
++ product('a', 'Молоко Простоквашино 900 мл 2,5%', 9900, { sizeKind: 'volume', sizeValue: 900, fat: 250, availability: 'available', barcodes: [{ code: '001234', packageId: null }] }),
++ product('b', 'Молоко Простоквашино 1 л 3,2%', 12000, { availability: 'available' }),
++ product('c', 'Молоко Домик 900 мл 2,5%', 8000, { availability: 'unknown' }),
++ product('d', 'Напиток без сахара', 7000), product('e', 'Сахар без добавок', 6000), product('f', 'Напиток сладкий', 5000)
++];
++const search = createCatalogSearch(products);
++test('literal search, decimal unit equivalence and explicit availability/price filter', () => {
++ assert.deepEqual(search('покажи мне молоко 0,9 л в наличии до 100 рублей').map(x => x.product.id), ['a']);
++ assert.equal(search('001234')[0].product.id, 'a');
++ assert.equal(search('молока простоквашино 900мл 2.5%')[0].product.id, 'a');
++ assert.equal(search('молоко 1л 2.5%').length, 0);
++});
++test('one typo, keyboard layout and transliteration work without broadening negative conditions', () => {
++ assert.equal(search('молко простоквашино 900мл')[0].product.id, 'a');
++ assert.ok(search('vjkjrj').some(x => x.product.id === 'a'));
++ assert.ok(search('moloko').some(x => x.product.id === 'a'));
++ assert.deepEqual(search('без сахара').map(x => x.product.id), ['d']);
++});
++test('matching flags size and fat conflicts, even for exact barcode or saved association', () => {
++ const alias = { id: 'alias', data: { active: true, supplierId: 'supplier', sourceName: 'Молоко Простоквашино 1л 3.2%', productId: 'a', packageId: null } };
++ const rows = search(alias.data.sourceName, { mode: 'match', barcode: '001234', supplierId: 'supplier', aliases: [alias] });
++ const candidate = rows.find(x => x.product.id === 'a'); assert.ok(candidate.score <= 39); assert.ok(candidate.warnings.some(x => x.includes('Отличается масса'))); assert.ok(candidate.warnings.some(x => x.includes('жирность')));
++ assert.equal(products[0].name, 'Молоко Простоквашино 900 мл 2,5%');
++});
++test('pack counts warn and never turn similarity scores into a conversion or probability', () => {
++ const candidate = search('Молоко Простоквашино 900 мл уп12', { mode: 'match' }).find(x => x.product.id === 'a'); assert.ok(candidate.warnings.some(x => x.includes('12 шт.'))); assert.ok(candidate.score <= 69);
++ assert.deepEqual(nameTraits('Молоко 0,9л 2,5%').sizes, [{ kind: 'volume', value: 900000 }]);
++ assert.deepEqual(nameTraits('Крупа 1кг').sizes, nameTraits('Крупа 1000г').sizes);
++ assert.throws(() => search('x'.repeat(301))); assert.throws(() => search('молоко', { barcode: {} }));
++});
++
++test('unmatched words return no suggestions; ambiguous legacy codes are explicitly flagged',()=>{
++ assert.deepEqual(search('несуществующий товар'),[]);
++ const code='123';const lookup=createCatalogSearch([product('x','Товар первый',100,{barcodes:[{code,packageId:null}]}),product('y','Товар второй',100,{barcodes:[{code,packageId:null}]})]);const rows=lookup(code);assert.equal(rows.length,2);assert.ok(rows.every(r=>r.score<=69&&r.warnings.some(w=>w.includes('нескольких товаров'))));
++});
+diff --git a/way-market/local-app/workspace-archive.mjs b/way-market/local-app/workspace-archive.mjs
+index 592ba66..be99d7c 100644
+--- a/way-market/local-app/workspace-archive.mjs
++++ b/way-market/local-app/workspace-archive.mjs
+@@ -1,3 +1,4 @@
++import { catalogState, validateCatalogDocument, CATALOG_KINDS } from './catalog-data.mjs';
+ import { financeState, validateFinanceDocument, FINANCE_KINDS } from './finance-data.mjs';
+ import { procurementState, validateProcurementDocument, PROCUREMENT_KINDS } from './procurement-data.mjs';
+ import { createHash } from 'node:crypto';
+@@ -14,6 +15,7 @@ export const ARCHIVE_TABLES = {
+   workspace_requests: ['id', 'digest', 'result'],
+   workspace_tasks: ['id', 'version', 'creator_id', 'assignee_id', 'title', 'status', 'related_cash', 'at_ms'],
+   workspace_products: ['id', 'version', 'name', 'barcode', 'price', 'active'],
++  workspace_catalog: ['id', 'version', 'kind', 'actor_id', 'at_ms', 'data', 'reason'],
+   workspace_finance: ['id', 'version', 'kind', 'actor_id', 'at_ms', 'data', 'reason'],
+   workspace_procurement: ['id', 'version', 'kind', 'actor_id', 'at_ms', 'data', 'reason'],
+   workspace_drafts: ['id', 'user_id', 'slot', 'version', 'base_version', 'fields', 'at_ms', 'request_id', 'request_digest']
+@@ -26,18 +28,18 @@ const id = v => typeof v === 'string' && /^[a-f0-9-]{36}$/.test(v);
+ const clean = (v, max, blank = false) => typeof v === 'string' && (blank || v.trim().length > 0) && v.length <= max && !/[\x00-\x1f]/.test(v);
+ const json = (v, max = MAX_WORKSPACE_BYTES) => { if (typeof v !== 'string' || v.length > max) fail(); try { return JSON.parse(v); } catch { fail(); } };
+ export function makeWorkspaceArchive(tables, createdAt = new Date().toISOString()) {
+-  const payload = { format: 'way-market-workspace', version: 4, createdAt, tables };
++  const payload = { format: 'way-market-workspace', version: 5, createdAt, tables };
+   const archive = { ...payload, digest: hash(payload) };
+   validateWorkspaceArchive(archive);
+   return archive;
+ }
+ export function validateWorkspaceArchive(archive) {
+-  if (!exact(archive, ['format', 'version', 'createdAt', 'tables', 'digest']) || archive.format !== 'way-market-workspace' || ![1, 2, 3, 4].includes(archive.version) || typeof archive.createdAt !== 'string' || !Number.isFinite(Date.parse(archive.createdAt)) || new Date(archive.createdAt).toISOString() !== archive.createdAt || !exact(archive.tables, Object.keys(ARCHIVE_TABLES).filter(t => (archive.version >= 2 || t !== 'workspace_drafts') && (archive.version >= 3 || t !== 'workspace_procurement') && (archive.version >= 4 || t !== 'workspace_finance')))) fail();
++  if (!exact(archive, ['format', 'version', 'createdAt', 'tables', 'digest']) || archive.format !== 'way-market-workspace' || ![1, 2, 3, 4, 5].includes(archive.version) || typeof archive.createdAt !== 'string' || !Number.isFinite(Date.parse(archive.createdAt)) || new Date(archive.createdAt).toISOString() !== archive.createdAt || !exact(archive.tables, Object.keys(ARCHIVE_TABLES).filter(t => (archive.version >= 2 || t !== 'workspace_drafts') && (archive.version >= 3 || t !== 'workspace_procurement') && (archive.version >= 4 || t !== 'workspace_finance') && (archive.version >= 5 || t !== 'workspace_catalog')))) fail();
+   const { digest, ...payload } = archive;
+   if (typeof digest !== 'string' || digest !== hash(payload) || Buffer.byteLength(JSON.stringify(archive)) > MAX_WORKSPACE_BYTES) fail();
+   let count = 0;
+   for (const [table, columns] of Object.entries(ARCHIVE_TABLES)) {
+-    if ((table === 'workspace_drafts' && archive.version === 1) || (table === 'workspace_procurement' && archive.version < 3) || (table === 'workspace_finance' && archive.version < 4)) continue;
++    if ((table === 'workspace_drafts' && archive.version === 1) || (table === 'workspace_procurement' && archive.version < 3) || (table === 'workspace_finance' && archive.version < 4) || (table === 'workspace_catalog' && archive.version < 5)) continue;
+     const rows = archive.tables[table]; if (!Array.isArray(rows)) fail(); count += rows.length;
+     if (count > MAX_WORKSPACE_ROWS || rows.some(r => !exact(r, columns))) fail();
+   }
+@@ -113,11 +115,34 @@ export function validateWorkspaceArchive(archive) {
+   for (const e of financialAudit.values()) { const d = JSON.parse(e.detail); if (!finance.get(e.subject_id)?.has(d.version)) fail(); }
+   let financialTotals;
+   try { financialTotals = financeState([...finance.values()].map(v => v.get(v.size)), procurementTotals, t.workspace_cash); } catch { fail(); }
++  const catalog = new Map(), catalogAudit = new Map();
++  for (const e of t.account_events.filter(e => e.kind === 'catalog.changed')) { const d = JSON.parse(e.detail), key = `${e.subject_id}:${d.version}`; if (catalogAudit.has(key)) fail(); catalogAudit.set(key, e); }
++  for (const r of t.workspace_catalog ?? []) {
++    if (!id(r.id) || !integer(r.version, 1) || !CATALOG_KINDS.includes(r.kind) || !users.has(r.actor_id) || !integer(r.at_ms) || !clean(r.reason, 500, r.kind === 'profile' || r.version === 1)) fail();
++    try { validateCatalogDocument(r.kind, json(r.data, 65536)); } catch { fail(); }
++    const versions = catalog.get(r.id) ?? new Map(); if (versions.has(r.version)) fail(); versions.set(r.version, r); catalog.set(r.id, versions);
++  }
++  for (const versions of catalog.values()) {
++    const firstNumber = Math.min(...versions.keys()), first = versions.get(firstNumber);
++    if (first.kind !== 'profile' && firstNumber !== 1) fail();
++    for (let n = firstNumber; n < firstNumber + versions.size; n++) {
++      const r = versions.get(n), e = r && catalogAudit.get(`${r.id}:${n}`); if (!r || r.kind !== first.kind || !e) fail(); const d = JSON.parse(e.detail);
++      if (e.actor_id !== r.actor_id || e.at_ms < r.at_ms || d.kind !== r.kind || d.reason !== r.reason || !isDeepStrictEqual(d.after, JSON.parse(r.data)) || !isDeepStrictEqual(d.before, n === firstNumber ? null : JSON.parse(versions.get(n - 1).data))) fail();
++      if (r.kind === 'profile' && !t.account_events.some(e => e.kind === 'product.changed' && e.subject_id === r.id && JSON.parse(e.detail).after?.version === n && e.actor_id === r.actor_id && e.at_ms >= r.at_ms)) fail();
++    }
++  }
++  if (archive.version >= 5) for (const e of catalogAudit.values()) if (!catalog.get(e.subject_id)?.has(JSON.parse(e.detail).version)) fail();
++  let catalogTotals;
++  try { catalogTotals = catalogState([...catalog.values()].map(v => v.get(Math.max(...v.keys()))), t.workspace_products, procurementTotals.suppliers); } catch { fail(); }
++  for (const versions of catalog.values()) for (const r of versions.values()) if (r.kind === 'alias') {
++    const d = JSON.parse(r.data);
++    if (d.packageId !== null && ![...(catalog.get(d.productId)?.values() ?? [])].some(p => p.kind === 'profile' && JSON.parse(p.data).packages.some(x => x.id === d.packageId))) fail();
++  }
+   const requests = new Set();
+   for (const r of t.workspace_requests) {
+     if (!id(r.id) || requests.has(r.id) || !/^[a-f0-9]{64}$/.test(r.digest)) fail(); requests.add(r.id);
+     const out = json(r.result, 1000);
+-    if (!exact(out, ['id', 'version']) || !id(out.id) || !integer(out.version, 1) || !(cash.get(out.id)?.has(out.version) || tasks.get(out.id)?.version >= out.version || products.get(out.id)?.version >= out.version || procurement.get(out.id)?.has(out.version) || finance.get(out.id)?.has(out.version))) fail();
++    if (!exact(out, ['id', 'version']) || !id(out.id) || !integer(out.version, 1) || !(cash.get(out.id)?.has(out.version) || tasks.get(out.id)?.version >= out.version || products.get(out.id)?.version >= out.version || procurement.get(out.id)?.has(out.version) || finance.get(out.id)?.has(out.version) || catalog.get(out.id)?.has(out.version))) fail();
+   }
+   // Every business revision must retain its original retry record and audit.
+   const targets = new Set(t.workspace_requests.map(r => { const out = JSON.parse(r.result); return `${out.id}:${out.version}`; }));
+@@ -127,6 +152,7 @@ export function validateWorkspaceArchive(archive) {
+   for (const row of t.workspace_products) if (!targets.has(`${row.id}:${row.version}`) || !audit.has(`product.changed:${row.id}:${row.version}`)) fail();
+   for (const versions of procurement.values()) for (const r of versions.values()) if (!targets.has(`${r.id}:${r.version}`)) fail();
+   for (const versions of finance.values()) for (const r of versions.values()) if (!targets.has(`${r.id}:${r.version}`)) fail();
++  for (const versions of catalog.values()) for (const r of versions.values()) if (!targets.has(`${r.id}:${r.version}`)) fail();
+   const draftIds = new Set(), draftSlots = new Set(); let drafts = 0;
+   for (const d of t.workspace_drafts ?? []) {
+     const user = users.get(d.user_id), key = `${d.user_id}:${d.slot}`;
+@@ -141,5 +167,5 @@ export function validateWorkspaceArchive(archive) {
+       drafts++;
+     }
+   }
+-  return { users: users.size, cash: cash.size, cashVersions: t.workspace_cash.length, tasks: tasks.size, products: products.size, drafts, suppliers: procurementTotals.suppliers.length, budgets: procurementTotals.budgets.length, orders: procurementTotals.orders.length, receipts: procurementTotals.receipts.length, reviews: procurementTotals.reviews.length, moneyAccounts: financialTotals.accounts.length, obligations: financialTotals.obligations.length, paymentPlans: financialTotals.plans.length, moneyMovements: financialTotals.movements.length, moneyCorrections: financialTotals.reversals.length, bankLines: financialTotals.bankLines.length, events: events.size, createdAt: archive.createdAt };
++  return { users: users.size, cash: cash.size, cashVersions: t.workspace_cash.length, tasks: tasks.size, products: products.size, drafts, suppliers: procurementTotals.suppliers.length, budgets: procurementTotals.budgets.length, orders: procurementTotals.orders.length, receipts: procurementTotals.receipts.length, reviews: procurementTotals.reviews.length, moneyAccounts: financialTotals.accounts.length, obligations: financialTotals.obligations.length, paymentPlans: financialTotals.plans.length, moneyMovements: financialTotals.movements.length, moneyCorrections: financialTotals.reversals.length, bankLines: financialTotals.bankLines.length, catalogGroups: catalogTotals.groups.length, catalogProfiles: [...catalog.values()].filter(v => [...v.values()][0].kind === 'profile').length, catalogAliases: catalogTotals.aliases.length, events: events.size, createdAt: archive.createdAt };
+ }
+diff --git a/way-market/local-app/workspace-backups.mjs b/way-market/local-app/workspace-backups.mjs
+index 1b537d5..a4039cc 100644
+--- a/way-market/local-app/workspace-backups.mjs
++++ b/way-market/local-app/workspace-backups.mjs
+@@ -128,7 +128,7 @@ export function createBackupService(workspace, { directory, restoreDirectory, in
+           restored = openWorkspace(path); restored.accounts.restoreWorkspace(archive, actor.id); restored.accounts.checkpoint();
+           const restoredOwner = archive.tables.account_users.find(u => u.active && u.role === 'owner');
+           const check = await backupWorker({ operation: 'check-restore', archive, tables: restored.accounts.workspaceSnapshot({ id: restoredOwner.id, version: restoredOwner.version }) });
+-          for (const key of ['users', 'cash', 'cashVersions', 'tasks', 'products', 'drafts', 'suppliers', 'budgets', 'orders', 'receipts', 'reviews', 'moneyAccounts', 'obligations', 'paymentPlans', 'moneyMovements', 'moneyCorrections', 'bankLines']) if (check.stats[key] !== stats[key]) throw new Error('Проверка восстановления не совпала');
++          for (const key of ['users', 'cash', 'cashVersions', 'tasks', 'products', 'drafts', 'suppliers', 'budgets', 'orders', 'receipts', 'reviews', 'moneyAccounts', 'obligations', 'paymentPlans', 'moneyMovements', 'moneyCorrections', 'bankLines', 'catalogGroups', 'catalogProfiles', 'catalogAliases']) if (check.stats[key] !== stats[key]) throw new Error('Проверка восстановления не совпала');
+           restored.accounts.checkpoint(); restored.close(); restored = null;
+           allowed(token); accounts.backupEvent(token, 'restore-checked', { id, path, stats });
+           return { path, stats, switched: false, sessionsRestored: false };
+diff --git a/way-market/local-app/workspace-backups.test.mjs b/way-market/local-app/workspace-backups.test.mjs
+index 80b40e0..fd6cc05 100644
+--- a/way-market/local-app/workspace-backups.test.mjs
++++ b/way-market/local-app/workspace-backups.test.mjs
+@@ -104,7 +104,9 @@ test('failed destination never reports success and does not delete an earlier go
+ test('schedule works after logout, survives as a visible pause after restart, and never persists the key', async t => {
+   const { w, owner, service, config, advance } = await fixture(t, { intervalUnitMs: 20 }); seed(w, owner);
+   await service.configure(owner.token, auth({ minutes: 10 })); w.accounts.logout(owner.token);
+-  for (let i = 0; i < 200; i++) { if ((await readdir(config.directory)).filter(f => f.endsWith('.wmbackup')).length >= 2) break; await delay(50); }
++  // Wait for real encrypted workers under shared CI CPU load, rather than assuming two copies finish in ten seconds.
++  const deadline = Date.now() + 120000;
++  while (Date.now() < deadline) { if ((await readdir(config.directory)).filter(f => f.endsWith('.wmbackup')).length >= 2) break; await delay(100); }
+   assert.ok((await readdir(config.directory)).filter(f => f.endsWith('.wmbackup')).length >= 2);
+   await service.close(); advance(); const login = await w.accounts.login({ login: 'owner', password });
+   for (let i = 0; i < 200 && (await service.status(login.token)).busy; i++) await delay(20);
+diff --git a/way-market/local-app/workspace-catalog.mjs b/way-market/local-app/workspace-catalog.mjs
+new file mode 100644
+index 0000000..0a04ef8
+--- /dev/null
++++ b/way-market/local-app/workspace-catalog.mjs
+@@ -0,0 +1,70 @@
++import { randomUUID } from 'node:crypto';
++import { InputError } from './domain.mjs';
++import { catalogState, defaultProductProfile, publicCatalogView, validateCatalogDocument, catalogId } from './catalog-data.mjs';
++import { createCatalogSearch, nameTraits } from './catalog-search.mjs';
++export const latestCatalog = db => db.prepare('SELECT d.* FROM workspace_catalog d JOIN (SELECT id,MAX(version) v FROM workspace_catalog GROUP BY id) m ON d.id=m.id AND d.version=m.v').all();
++const suppliers = db => db.prepare("SELECT id,version,data FROM workspace_procurement WHERE kind='supplier' AND (id,version) IN (SELECT id,MAX(version) FROM workspace_procurement GROUP BY id)").all();
++export const workspaceCatalogState = db => catalogState(latestCatalog(db), db.prepare('SELECT * FROM workspace_products ORDER BY name,id').all(), suppliers(db));
++export function workspacePublicCatalog(db) {
++  const rows = latestCatalog(db).filter(r => r.kind !== 'alias'), published = rows.filter(r => r.kind === 'profile' && JSON.parse(r.data).published), ids = new Set(published.map(r => r.id));
++  const products = db.prepare('SELECT * FROM workspace_products WHERE active=1 ORDER BY name,id').all().filter(p => ids.has(p.id)), activeIds = new Set(products.map(p => p.id));
++  return publicCatalogView(catalogState(rows.filter(r => r.kind === 'group' || activeIds.has(r.id)), products, []));
++}
++export function saveProductProfile(db, actor, audit, at, product, oldProduct, payload) {
++  const old = db.prepare("SELECT * FROM workspace_catalog WHERE id=? AND kind='profile' ORDER BY version DESC LIMIT 1").get(product.id);
++  if (payload.profile !== undefined && (!payload.profile || typeof payload.profile !== 'object' || Array.isArray(payload.profile))) throw new InputError('Неверная структура карточки');
++  let data = payload.profile ? structuredClone(payload.profile) : old ? JSON.parse(old.data) : defaultProductProfile(product.barcode);
++  if (!payload.profile && old && product.barcode !== oldProduct.barcode) data.barcodes = [...(product.barcode ? [{ code: product.barcode, packageId: null }] : []), ...data.barcodes.filter(b => b.code !== oldProduct.barcode && b.code !== product.barcode)];
++  for (const key of ['article', 'cashCode', 'brand']) if (typeof data[key] === 'string') data[key] = data[key].trim();
++  if (Array.isArray(data.packages)) for (const p of data.packages) if (typeof p?.label === 'string') p.label = p.label.trim();
++  validateCatalogDocument('profile', data);
++  const traits = nameTraits(product.name);
++  if (data.sizeKind !== 'none' && traits.sizes.some(x => x.kind !== data.sizeKind || x.value !== data.sizeValue * 1000) || data.fat !== null && traits.fats.some(x => x !== data.fat)) throw new InputError('Фасовка или жирность карточки противоречит названию товара');
++  const reason = typeof payload.reason === 'string' ? payload.reason.trim() : '';
++  if ((payload.profile && oldProduct && !reason) || reason.length > 500 || /[\x00-\x1f]/.test(reason)) throw new InputError('Укажите причину изменения карточки');
++  const row = { id: product.id, version: product.version, kind: 'profile', actor_id: actor.id, at_ms: at, data: JSON.stringify(data), reason };
++  catalogState([...latestCatalog(db).filter(r => r.id !== row.id), row], db.prepare('SELECT * FROM workspace_products').all(), suppliers(db));
++  db.prepare('INSERT INTO workspace_catalog VALUES (?,?,?,?,?,?,?)').run(row.id, row.version, row.kind, actor.id, at, row.data, reason);
++  audit('catalog.changed', row.id, { version: row.version, kind: 'profile', before: old ? JSON.parse(old.data) : null, after: data, reason });
++}
++export function catalogMethods(command, request, Conflict) {
++  return {
++    catalog(token, { all = false } = {}) { return command(token, all ? 'catalog.manage' : 'catalog.read', () => ({}), db => { const s = workspaceCatalogState(db); return { groups: s.groups.map(g => ({ id: g.id, version: g.version, data: g.data })), products: s.products.filter(p => all || p.active), warnings: s.warnings }; }); },
++    catalogHistory(token, id) { return command(token, 'catalog.manage', () => ({}), db => { const core = new Map(db.prepare("SELECT detail FROM account_events WHERE subject_id=? AND kind='product.changed'").all(id).map(e => { const d = JSON.parse(e.detail); return [d.after.version, d.after]; })); return db.prepare("SELECT * FROM workspace_catalog WHERE id=? AND kind IN ('group','profile') ORDER BY version").all(id).map(r => ({ ...r, data: JSON.parse(r.data), ...(r.kind === 'profile' ? { core: core.get(r.version) } : {}) })); }); },
++    catalogAliases(token) { return command(token, 'catalog.match', () => ({}), db => { const s = workspaceCatalogState(db), vendors = suppliers(db); return s.aliases.map(a => ({ ...a, productVersion: s.products.find(p => p.id === a.data.productId).version, supplierVersion: vendors.find(v => v.id === a.data.supplierId).version })); }); },
++    catalogSuggest(token, p) { return command(token, 'catalog.match', () => ({}), db => {
++      if (!p || typeof p.sourceName !== 'string') throw new InputError('Введите исходное наименование');
++      const supplier = suppliers(db).find(s => s.id === p.supplierId); if (!supplier || !JSON.parse(supplier.data).active) throw new InputError('Выберите действующего поставщика');
++      const state = workspaceCatalogState(db), matches = createCatalogSearch(state.products, state.groups)(p.sourceName, { mode: 'match', supplierId: supplier.id, aliases: state.aliases, barcode: p.barcode ?? '', limit: 10 });
++      return { supplierVersion: supplier.version, sourceName: p.sourceName, matches, note: 'Баллы — сходство по правилам, не вероятность. Подтвердите товар и единицу вручную.' };
++    }); },
++    catalogSave(token, p) {
++      if (!p || !['group', 'alias'].includes(p.kind)) throw new InputError('Неизвестная команда каталога');
++      return command(token, p.kind === 'alias' ? 'catalog.match' : 'catalog.manage', () => ({}), (db, actor, audit, at) => request(db, p.requestId, { actorId: actor.id, kind: 'catalog', payload: p }, () => {
++        if (p.id != null && !catalogId(p.id)) throw new InputError('Неверный идентификатор');
++        const old = p.id ? db.prepare('SELECT * FROM workspace_catalog WHERE id=? ORDER BY version DESC LIMIT 1').get(p.id) : null;
++        if (!Number.isSafeInteger(p.expectedVersion) || p.expectedVersion !== (old?.version ?? 0) || p.id && !old) throw new Conflict('Каталог изменён. Обновите данные');
++        if (old && old.kind !== p.kind) throw new InputError('Тип записи нельзя изменить');
++        const reason = typeof p.reason === 'string' ? p.reason.trim() : '';
++        if (reason.length > 500 || /[\x00-\x1f]/.test(reason) || old && !reason) throw new InputError('Укажите причину изменения');
++        let data;
++        if (p.kind === 'group') data = { name: typeof p.name === 'string' ? p.name.trim() : p.name, parentId: p.parentId, active: p.active };
++        else {
++          if (p.confirmed !== true) throw new InputError('Подтвердите товар и упаковку после проверки');
++          const product = db.prepare('SELECT * FROM workspace_products WHERE id=?').get(typeof p.productId === 'string' ? p.productId : '');
++          const supplier = suppliers(db).find(s => s.id === p.supplierId);
++          if (!product || product.version !== p.productVersion || !supplier || supplier.version !== p.supplierVersion) throw new Conflict('Товар или поставщик изменён. Повторите сопоставление');
++          if (p.active && (!product.active || !JSON.parse(supplier.data).active)) throw new InputError('Товар или поставщик отключён');
++          data = { supplierId: supplier.id, sourceName: p.sourceName, productId: product.id, packageId: p.packageId, active: p.active };
++        }
++        validateCatalogDocument(p.kind, data);
++        const id = old?.id ?? randomUUID(), version = (old?.version ?? 0) + 1;
++        const row = { id, version, kind: p.kind, actor_id: actor.id, at_ms: at, data: JSON.stringify(data), reason };
++        catalogState([...latestCatalog(db).filter(r => r.id !== id), row], db.prepare('SELECT * FROM workspace_products').all(), suppliers(db));
++        db.prepare('INSERT INTO workspace_catalog VALUES (?,?,?,?,?,?,?)').run(id, version, p.kind, actor.id, at, row.data, reason);
++        audit('catalog.changed', id, { version, kind: p.kind, before: old ? JSON.parse(old.data) : null, after: data, reason });
++        return { id, version };
++      }));
++    }
++  };
++}
+diff --git a/way-market/local-app/workspace-catalog.test.mjs b/way-market/local-app/workspace-catalog.test.mjs
+new file mode 100644
+index 0000000..f33e2c3
+--- /dev/null
++++ b/way-market/local-app/workspace-catalog.test.mjs
+@@ -0,0 +1,32 @@
++import test, { before, after } from 'node:test';
++import assert from 'node:assert/strict';
++import { randomUUID, createHash } from 'node:crypto';
++import { openWorkspace } from './workspace-store.mjs';
++import { createWorkspaceServer } from './workspace-server.mjs';
++import { defaultProductProfile, catalogNorm } from './catalog-data.mjs';
++import { makeWorkspaceArchive, validateWorkspaceArchive } from './workspace-archive.mjs';
++import { backupWorker } from './workspace-backups.mjs';
++const password='Проверяем расширенный каталог 12345';let w,owner,admin,accountant,employee,server,base;
++const cmd=(kind,p={})=>({kind,expectedVersion:0,requestId:randomUUID(),...p}), save=p=>w.catalogSave(owner.token,p);
++before(async()=>{w=openWorkspace(':memory:');await w.accounts.bootstrapOwner({login:'owner',name:'Владелец',password});owner=await w.accounts.login({login:'owner',password});const sessions=[];for(const role of ['administrator','accountant','employee']){await w.accounts.createUser(owner.token,{login:role,name:role,role,password});sessions.push(await w.accounts.login({login:role,password}));}[admin,accountant,employee]=sessions;({server}=createWorkspaceServer(w));await new Promise(r=>server.listen(0,'127.0.0.1',r));base=`http://127.0.0.1:${server.address().port}`;});
++after(async()=>{await new Promise(r=>server.close(r));w.close();});
++function product(profile={},extra={}){return w.productSave(owner.token,{requestId:randomUUID(),expectedVersion:0,name:'Молоко 900мл 2,5%',price:'99.90',barcode:'',active:true,profile:{...defaultProductProfile(),...profile},...extra});}
++function supplier(){return w.procurementSave(owner.token,cmd('supplier',{name:'Поставщик',contact:'',terms:'',active:true}));}
++const read=()=>w.catalog(owner.token,{all:true});
++function update(p,profile={},extra={}){const row=read().products.find(x=>x.id===p.id);return w.productSave(owner.token,{...row,profile:{...row.profile,...profile},price:(row.price/100).toFixed(2),active:Boolean(row.active),expectedVersion:row.version,requestId:randomUUID(),reason:'Уточнение карточки',...extra});}
++test('extended product and profile save atomically with stable ID, core compatibility and history',()=>{const group=save(cmd('group',{name:'Молочное',parentId:null,active:true})),packId=randomUUID(),barcode='000123456';const p=product({groupId:group.id,article:'АРТ-1',cashCode:'00101',brand:'Бренд',unit:'шт',sizeKind:'volume',sizeValue:900,fat:250,packages:[{id:packId,label:'Коробка',quantity:12000}],barcodes:[{code:barcode,packageId:null},{code:'000123457',packageId:packId}]},{barcode});const got=read().products.find(x=>x.id===p.id);assert.equal(got.profile.packages[0].quantity,12000);assert.equal(got.profile.cashCode,'00101');assert.equal(w.products(employee.token).find(x=>x.id===p.id).barcode,barcode);assert.equal(w.catalogHistory(admin.token,p.id).length,1);assert.throws(()=>update(p,{weighted:true,unit:'шт'}));assert.equal(read().products.find(x=>x.id===p.id).version,1);});
++test('barcodes and active cash codes cannot ambiguously identify two products',()=>{const code='000765432';product({barcodes:[{code,packageId:null}],cashCode:'K-1'},{barcode:code});assert.throws(()=>product({barcodes:[{code,packageId:null}]},{barcode:code}),/Штрихкод уже/);assert.throws(()=>product({cashCode:'k-1'}),/Код кассы/);});
++test('old API writes preserve extended fields and append a coherent profile revision',()=>{const p=product({brand:'Сохранить бренд'}),old=w.products(owner.token).find(x=>x.id===p.id);w.productSave(owner.token,{...old,active:true,price:'100',expectedVersion:1,requestId:randomUUID()});const got=read().products.find(x=>x.id===p.id);assert.equal(got.profile.brand,'Сохранить бренд');assert.equal(got.version,2);assert.equal(w.catalogHistory(owner.token,p.id).length,2);assert.throws(()=>update(p,{}, {expectedVersion:1}),/изменён/);});
++test('group hierarchy rejects cycles, duplicate siblings and hiding a group with active products',()=>{const a=save(cmd('group',{name:'Родитель',parentId:null,active:true})),b=save(cmd('group',{name:'Дочерняя',parentId:a.id,active:true}));assert.throws(()=>save(cmd('group',{name:'дочерняя',parentId:a.id,active:true})),/уже существует/);assert.throws(()=>save(cmd('group',{id:a.id,expectedVersion:1,name:'Родитель',parentId:b.id,active:true,reason:'Цикл'})),/Цикл/);product({groupId:b.id});assert.throws(()=>save(cmd('group',{id:b.id,expectedVersion:1,name:'Дочерняя',parentId:a.id,active:false,reason:'Скрыть'})),/недоступн/);});
++test('supplier associations preserve exact source spelling and require explicit confirmation/current versions',()=>{const s=supplier(),p=product(),source='  МОЛОКО "Поставщ./900мл" 2,5%  ',payload=cmd('alias',{supplierId:s.id,supplierVersion:1,sourceName:source,productId:p.id,productVersion:1,packageId:null,active:true,confirmed:true});assert.throws(()=>save({...payload,confirmed:false}),/Подтвердите/);const alias=save(payload);assert.deepEqual(save(payload),alias);assert.equal(w.catalogAliases(accountant.token).find(a=>a.id===alias.id).data.sourceName,source);const result=w.catalogSuggest(accountant.token,{supplierId:s.id,sourceName:source});assert.equal(result.sourceName,source);assert.equal(result.matches.find(m=>m.product.id===p.id).aliasId,alias.id);assert.throws(()=>save({...payload,requestId:randomUUID()}),/уже сопоставлено/);assert.equal(catalogNorm(source),catalogNorm(source.trim()));});
++test('association is scoped to supplier, can be disabled and cannot silently outlive its package',()=>{const s=supplier(),pId=randomUUID(),p=product({packages:[{id:pId,label:'12 шт',quantity:12000}]}),source='Молоко упаковка';const payload=cmd('alias',{supplierId:s.id,supplierVersion:1,sourceName:source,productId:p.id,productVersion:1,packageId:pId,active:true,confirmed:true}),alias=save(payload);assert.throws(()=>update(p,{packages:[]}),/упаковк/);save({...payload,id:alias.id,expectedVersion:1,requestId:randomUUID(),active:false,reason:'Отменено'});update(p,{packages:[]});assert.equal(w.catalogSuggest(owner.token,{supplierId:s.id,sourceName:source}).matches.some(m=>m.aliasId===alias.id),false);const other=supplier();assert.equal(w.catalogSuggest(owner.token,{supplierId:other.id,sourceName:source}).matches.some(m=>m.aliasId===alias.id),false);});
++test('public projection starts empty and exposes only explicitly published retail data',async()=>{const count=w.publicCatalog().products.length,p=product({published:false,cashCode:'PRIVATE-1',article:'PRIVATE-ART',availability:'unknown',description:'Розничное описание'});assert.equal(w.publicCatalog().products.length,count);update(p,{published:true});const result=await(await fetch(base+'/api/shop/catalog')).json(),got=result.products.find(x=>x.id===p.id);assert.ok(got);assert.equal(got.price,9990);assert.equal(got.availability,'unknown');for(const key of ['cashCode','article','actorId','reason','barcodes','aliases','supplierId','cost','input'])assert.equal(Object.hasOwn(got,key),false);assert.equal(JSON.stringify(result).includes('PRIVATE-ART'),false);assert.equal((await fetch(base+'/api/catalog')).status,401);});
++test('archiving or unpublishing removes a product from anonymous catalog without deleting history',()=>{const p=product({published:true});assert.ok(w.publicCatalog().products.some(x=>x.id===p.id));update(p,{}, {active:false});assert.equal(w.publicCatalog().products.some(x=>x.id===p.id),false);assert.equal(w.catalogHistory(owner.token,p.id).length,2);});
++test('roles separate catalog editing, supplier matching, private history and anonymous retail',async()=>{assert.throws(()=>w.catalogAliases(admin.token));assert.throws(()=>w.catalogAliases(employee.token));assert.throws(()=>w.catalogHistory(employee.token,randomUUID()));assert.throws(()=>w.catalogSave(accountant.token,cmd('group',{name:'Нет',parentId:null,active:true})));const headers={Cookie:`way_workspace=${employee.token}`};assert.equal((await fetch(base+'/api/catalog',{headers})).status,200);assert.equal((await fetch(base+'/api/catalog?all=1',{headers})).status,403);assert.equal((await fetch(base+'/api/catalog/aliases',{headers})).status,403);const s=supplier();assert.equal((await fetch(base+'/api/catalog/suggest',{method:'POST',headers:{Cookie:`way_workspace=${owner.token}`,'Content-Type':'application/json'},body:JSON.stringify({supplierId:s.id,sourceName:'Молоко'})})).status,403);});
++test('archive v5 validates catalog history, references and retry records including disabled packages',()=>{const archive=makeWorkspaceArchive(w.accounts.workspaceSnapshot(owner.token));assert.equal(archive.version,5);for(const mutate of [a=>{a.tables.workspace_catalog[0].version+=100;},a=>{a.tables.account_events=a.tables.account_events.filter(e=>e.kind!=='catalog.changed');},a=>{const row=a.tables.workspace_catalog.find(r=>r.kind==='alias'),d=JSON.parse(row.data);d.productId=randomUUID();row.data=JSON.stringify(d);},a=>{a.tables.workspace_requests=[];}]){const changed=structuredClone(archive);mutate(changed);const{digest,...payload}=changed;changed.digest=createHash('sha256').update(JSON.stringify(payload)).digest('hex');assert.throws(()=>validateWorkspaceArchive(changed));}});
++test('encrypted restore preserves extended cards, matching memory, publication flags and idempotency',async()=>{const s=supplier(),p=product(),payload=cmd('alias',{supplierId:s.id,supplierVersion:1,sourceName:'Проверка восстановления',productId:p.id,productVersion:1,packageId:null,active:true,confirmed:true}),saved=save(payload),key='Ключ копии расширенного каталога 123';const encrypted=await backupWorker({operation:'encrypt',password:key,tables:w.accounts.workspaceSnapshot(owner.token)});const{archive,stats}=await backupWorker({operation:'decrypt',password:key,bytes:encrypted.bytes});assert.ok(stats.catalogProfiles>0);const restored=openWorkspace(':memory:');try{restored.accounts.restoreWorkspace(archive,owner.user.id);const s=await restored.accounts.login({login:'owner',password});assert.deepEqual(restored.catalog(s.token,{all:true}),read());assert.deepEqual(restored.publicCatalog(),w.publicCatalog());assert.deepEqual(restored.catalogSave(s.token,payload),saved);}finally{restored.close();}});
++
++test('legacy v4 restores without publishing and lazily starts profile history at the next core revision',async()=>{
++ const archive=makeWorkspaceArchive(w.accounts.workspaceSnapshot(owner.token)),catalogIds=new Set(archive.tables.workspace_catalog.filter(r=>r.kind!=='profile').map(r=>r.id));archive.version=4;delete archive.tables.workspace_catalog;archive.tables.account_events=archive.tables.account_events.filter(e=>e.kind!=='catalog.changed');archive.tables.workspace_requests=archive.tables.workspace_requests.filter(r=>!catalogIds.has(JSON.parse(r.result).id));const{digest,...payload}=archive;archive.digest=createHash('sha256').update(JSON.stringify(payload)).digest('hex');assert.equal(validateWorkspaceArchive(archive).catalogProfiles,0);
++ const restored=openWorkspace(':memory:');try{restored.accounts.restoreWorkspace(archive,owner.user.id);const s=await restored.accounts.login({login:'owner',password});assert.equal(restored.publicCatalog().products.length,0);await backupWorker({operation:'check-restore',archive,tables:restored.accounts.workspaceSnapshot(s.token)});const old=restored.products(s.token)[0];const saved=restored.productSave(s.token,{...old,price:(old.price/100).toFixed(2),active:true,expectedVersion:old.version,requestId:randomUUID()});assert.equal(restored.catalogHistory(s.token,old.id)[0].version,saved.version);assert.equal(makeWorkspaceArchive(restored.accounts.workspaceSnapshot(s.token)).version,5);}finally{restored.close();}
++});
+diff --git a/way-market/local-app/workspace-drafts.test.mjs b/way-market/local-app/workspace-drafts.test.mjs
+index 51e28a8..e3a5e17 100644
+--- a/way-market/local-app/workspace-drafts.test.mjs
++++ b/way-market/local-app/workspace-drafts.test.mjs
+@@ -125,7 +125,7 @@ function resign(archive) { const { digest, ...payload } = archive; archive.diges
+ test('encrypted version 2 backup restores private raw drafts and validates their user and cash links', async () => {
+   const encrypted = await backupWorker({ operation: 'encrypt', password, tables: w.accounts.workspaceSnapshot(owner.token) });
+   const { archive } = await backupWorker({ operation: 'decrypt', password, bytes: encrypted.bytes });
+-  assert.equal(archive.version, 4); assert.ok(validateWorkspaceArchive(archive).drafts > 0);
++  assert.equal(archive.version, 5); assert.ok(validateWorkspaceArchive(archive).drafts > 0);
+   const restored = openWorkspace(':memory:');
+   try {
+     restored.accounts.restoreWorkspace(archive, owner.user.id);
+@@ -140,7 +140,7 @@ test('encrypted version 2 backup restores private raw drafts and validates their
+ test('version 1 backups remain restorable and are compared with an empty draft table', async () => {
+   const encrypted = await backupWorker({ operation: 'encrypt', password, tables: w.accounts.workspaceSnapshot(owner.token) });
+   const { archive } = await backupWorker({ operation: 'decrypt', password, bytes: encrypted.bytes });
+-  archive.version = 1; delete archive.tables.workspace_drafts; delete archive.tables.workspace_procurement; delete archive.tables.workspace_finance; resign(archive); validateWorkspaceArchive(archive);
++  archive.version = 1; delete archive.tables.workspace_drafts; delete archive.tables.workspace_procurement; delete archive.tables.workspace_finance; delete archive.tables.workspace_catalog; archive.tables.account_events = archive.tables.account_events.filter(e => e.kind !== 'catalog.changed'); resign(archive); validateWorkspaceArchive(archive);
+   const restored = openWorkspace(':memory:');
+   try {
+     restored.accounts.restoreWorkspace(archive, owner.user.id);
+diff --git a/way-market/local-app/workspace-finance.test.mjs b/way-market/local-app/workspace-finance.test.mjs
+index 5726643..9fe6461 100644
+--- a/way-market/local-app/workspace-finance.test.mjs
++++ b/way-market/local-app/workspace-finance.test.mjs
+@@ -182,7 +182,7 @@ test('simultaneous HTTP commands cannot settle the same outstanding amount twice
+ });
+ test('archive v4 validates financial links, audit, retries and recalculated balances', () => {
+   const standalone = account({ name: 'Отдельный счёт для проверки аудита' });
+-  const archive = makeWorkspaceArchive(w.accounts.workspaceSnapshot(owner.token)); assert.equal(archive.version, 4);
++  const archive = makeWorkspaceArchive(w.accounts.workspaceSnapshot(owner.token)); assert.equal(archive.version, 5);
+   for (const mutate of [
+     a => { a.tables.workspace_finance = a.tables.workspace_finance.filter(d => d.id !== standalone.id); a.tables.workspace_requests = a.tables.workspace_requests.filter(r => JSON.parse(r.result).id !== standalone.id); },
+     a => { const m = a.tables.workspace_finance.find(x => x.kind === 'movement'), d = JSON.parse(m.data); d.accountId = randomUUID(); m.data = JSON.stringify(d); },
+@@ -203,8 +203,8 @@ test('encrypted restore preserves balances, debt, plans, corrections and retry r
+ 
+ test('version 3 restores procurement and cash with empty finance, without inventing money from prior receipts', async () => {
+   const legacy = makeWorkspaceArchive(w.accounts.workspaceSnapshot(owner.token)), financeIds = new Set(legacy.tables.workspace_finance.map(d => d.id));
+-  legacy.version = 3; delete legacy.tables.workspace_finance;
+-  legacy.tables.account_events = legacy.tables.account_events.filter(e => e.kind !== 'finance.changed');
++  legacy.version = 3; delete legacy.tables.workspace_finance; delete legacy.tables.workspace_catalog;
++  legacy.tables.account_events = legacy.tables.account_events.filter(e => e.kind !== 'finance.changed' && e.kind !== 'catalog.changed');
+   legacy.tables.workspace_requests = legacy.tables.workspace_requests.filter(r => !financeIds.has(JSON.parse(r.result).id));
+   const { digest, ...payload } = legacy; legacy.digest = createHash('sha256').update(JSON.stringify(payload)).digest('hex'); const stats = validateWorkspaceArchive(legacy); assert.equal(stats.moneyAccounts, 0); assert.ok(stats.receipts > 0);
+   const restored = openWorkspace(':memory:');
+diff --git a/way-market/local-app/workspace-procurement.test.mjs b/way-market/local-app/workspace-procurement.test.mjs
+index bd7de3b..e42253b 100644
+--- a/way-market/local-app/workspace-procurement.test.mjs
++++ b/way-market/local-app/workspace-procurement.test.mjs
+@@ -112,7 +112,7 @@ test('only owner sets limits; operational roles cannot read procurement through
+ });
+ test('current archive recalculates procurement and rejects tampered links, audit, quantities and lost requests', () => {
+   const f = seed(); save(f.receipt());
+-  const archive = makeWorkspaceArchive(w.accounts.workspaceSnapshot(owner.token)); assert.equal(archive.version, 4);
++  const archive = makeWorkspaceArchive(w.accounts.workspaceSnapshot(owner.token)); assert.equal(archive.version, 5);
+   for (const mutate of [
+     a => { a.tables.workspace_procurement.find(x => x.id === f.order.id).data = JSON.stringify({ ...orderFor(f).data, budgetId: randomUUID() }); },
+     a => { a.tables.workspace_requests = a.tables.workspace_requests.filter(x => x.id !== f.orderPayload.requestId); },
+@@ -134,7 +134,7 @@ test('encrypted backup restores procurement history, computed reserve and idempo
+ test('legacy archives v1/v2 restore without invented procurement documents', () => {
+   for (const version of [1, 2]) {
+     const empty = structuredClone(makeWorkspaceArchive(w.accounts.workspaceSnapshot(owner.token)));
+-    empty.version = version; delete empty.tables.workspace_finance; empty.tables.workspace_procurement = []; delete empty.tables.workspace_procurement;
++    empty.version = version; delete empty.tables.workspace_finance; delete empty.tables.workspace_catalog; empty.tables.account_events = empty.tables.account_events.filter(e => e.kind !== 'catalog.changed'); empty.tables.workspace_procurement = []; delete empty.tables.workspace_procurement;
+     empty.tables.workspace_requests = []; empty.tables.workspace_products = [];
+     empty.tables.account_events = empty.tables.account_events.filter(e => !e.kind.startsWith('procurement.') && e.kind !== 'product.changed');
+     if (version === 1) delete empty.tables.workspace_drafts;
+diff --git a/way-market/local-app/workspace-server.mjs b/way-market/local-app/workspace-server.mjs
+index cdd0960..df22404 100644
+--- a/way-market/local-app/workspace-server.mjs
++++ b/way-market/local-app/workspace-server.mjs
+@@ -18,6 +18,11 @@ const root = dirname(fileURLToPath(import.meta.url));
+ const files = new Map([
+   ['/', ['workspace/index.html', 'text/html; charset=utf-8']],
+   ['/workspace.mjs', ['workspace/app.mjs', 'text/javascript; charset=utf-8']],
++  ['/catalog.mjs', ['workspace/catalog.mjs', 'text/javascript; charset=utf-8']],
++  ['/catalog-data.mjs', ['catalog-data.mjs', 'text/javascript; charset=utf-8']],
++  ['/catalog-search.mjs', ['catalog-search.mjs', 'text/javascript; charset=utf-8']],
++  ['/shop', ['workspace/shop.html', 'text/html; charset=utf-8']],
++  ['/shop.mjs', ['workspace/shop.mjs', 'text/javascript; charset=utf-8']],
+   ['/finance.mjs', ['workspace/finance.mjs', 'text/javascript; charset=utf-8']],
+   ['/procurement.mjs', ['workspace/procurement.mjs', 'text/javascript; charset=utf-8']],
+   ['/workspace.css', ['workspace/style.css', 'text/css; charset=utf-8']],
+@@ -51,6 +56,7 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
+         const [file, type] = files.get(path);
+         res.writeHead(200, { ...headers, 'Content-Type': type }); res.end(await readFile(join(root, file))); return;
+       }
++      if (req.method === 'GET' && path === '/api/shop/catalog') return send(200, workspace.publicCatalog());
+       if (req.method === 'GET' && path === '/api/session') {
+         let user = null;
+         try { user = a.session(token, false); } catch (error) { if (!(error instanceof AccessError)) throw error; }
+@@ -92,6 +98,9 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
+         if (match) return send(200, workspace.cashGet(token, match[1], Boolean(match[2])));
+         if (path === '/api/tasks') return send(200, workspace.tasks(token));
+         if (path === '/api/products') return send(200, workspace.products(token));
++        if (path === '/api/catalog') return send(200, workspace.catalog(token, { all: url.searchParams.get('all') === '1' }));
++        if (path === '/api/catalog/aliases') return send(200, workspace.catalogAliases(token));
++        if (path.startsWith('/api/catalog/history/')) return send(200, workspace.catalogHistory(token, path.slice('/api/catalog/history/'.length)));
+         if (path === '/api/procurement') return send(200, workspace.procurement(token));
+         if (path === '/api/finance') return send(200, workspace.finance(token));
+         if (path.startsWith('/api/finance/history/')) return send(200, workspace.financeHistory(token, path.slice('/api/finance/history/'.length)));
+@@ -118,6 +127,8 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
+         if (path === '/api/cash-drafts') return send(200, workspace.draftSave(token, payload));
+         if (path === '/api/tasks') return send(200, workspace.taskSave(token, payload));
+         if (path === '/api/products') return send(200, workspace.productSave(token, payload));
++        if (path === '/api/catalog') return send(200, workspace.catalogSave(token, payload));
++        if (path === '/api/catalog/suggest') return send(200, workspace.catalogSuggest(token, payload));
+         if (path === '/api/procurement') return send(200, workspace.procurementSave(token, payload));
+         if (path === '/api/finance') return send(200, workspace.financeSave(token, payload));
+       }
+diff --git a/way-market/local-app/workspace-store.mjs b/way-market/local-app/workspace-store.mjs
+index 3861362..7a89f81 100644
+--- a/way-market/local-app/workspace-store.mjs
++++ b/way-market/local-app/workspace-store.mjs
+@@ -1,3 +1,4 @@
++import { catalogMethods, saveProductProfile } from './workspace-catalog.mjs';
+ import { createHash, randomUUID } from 'node:crypto';
+ import { openAccounts } from './accounts.mjs';
+ import { AccessError } from './access.mjs';
+@@ -41,6 +42,8 @@ export function openWorkspace(filename, options = {}) {
+     accounts,
+     ...procurementMethods(command, request, VersionError),
+     ...financeMethods(command, request, VersionError),
++    ...catalogMethods(command, request, VersionError),
++    publicCatalog: accounts.publicCatalog,
+     draftList(token) { return command(token, 'cash.submit', (db, actor) => ({ cashierId: actor.id }), (db, actor) => listDrafts(db, actor)); },
+     draftGet(token, slot) { return command(token, 'cash.submit', (db, actor) => ({ cashierId: actor.id }), (db, actor) => readDraft(db, actor, slot)); },
+     draftSave(token, p) { return command(token, 'cash.submit', (db, actor) => ({ cashierId: actor.id }), (db, actor, audit, at) => writeDraft(db, actor, audit, at, p)); },
+@@ -114,13 +117,14 @@ export function openWorkspace(filename, options = {}) {
+       return { id, version };
+     })); },
+     products(token) { return command(token, 'catalog.read', () => ({}), db => db.prepare('SELECT * FROM workspace_products WHERE active=1 ORDER BY name LIMIT 1000').all()); },
+-    productSave(token, p) { return command(token, 'catalog.manage', () => ({}), (db, actor, audit) => request(db, p.requestId, { actorId: actor.id, kind: 'product', payload: p }, () => {
++    productSave(token, p) { return command(token, 'catalog.manage', () => ({}), (db, actor, audit, at) => request(db, p.requestId, { actorId: actor.id, kind: 'product', payload: p }, () => {
+       const old = p.id ? db.prepare('SELECT * FROM workspace_products WHERE id=?').get(p.id) : null;
+       if (p.expectedVersion !== (old?.version ?? 0) || (p.id && !old)) throw new VersionError('Товар изменён');
+       const name = text(p.name, 150), barcode = typeof p.barcode === 'string' && /^\d{0,32}$/.test(p.barcode) ? p.barcode : null;
+       if (barcode === null || typeof p.active !== 'boolean') throw new InputError('Проверьте штрихкод и состояние товара');
+       const price = money(p.price, 'Розничная цена'), id = old?.id ?? randomUUID(), version = (old?.version ?? 0) + 1;
+       db.prepare('INSERT INTO workspace_products VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,name=excluded.name,barcode=excluded.barcode,price=excluded.price,active=excluded.active').run(id, version, name, barcode, price, Number(p.active));
++      saveProductProfile(db, actor, audit, at, { id, version, name, barcode, price, active: Number(p.active) }, old, p);
+       audit('product.changed', id, { before: old ?? null, after: { version, name, barcode, price, active: p.active } });
+       return { id, version };
+     })); },
+diff --git a/way-market/local-app/workspace/app.mjs b/way-market/local-app/workspace/app.mjs
+index 6531fdd..36bcc17 100644
+--- a/way-market/local-app/workspace/app.mjs
++++ b/way-market/local-app/workspace/app.mjs
+@@ -1,3 +1,4 @@
++import { catalogPageFactory } from '/catalog.mjs';
+ import { financePageFactory } from '/finance.mjs';
+ import { procurementPageFactory } from '/procurement.mjs';
+ import { EXCEL_FIELDS, defaultExcelSettings, evaluateExcel } from '/worksheet.mjs';
+@@ -103,7 +104,7 @@ function buildNavigation() {
+   }
+   $('profile-button').textContent = `${user.name} · ${roles[user.role]}`;
+ }
+-const titles = { home: ['Главная', 'Главное для вашей работы.'], cash: ['Касса', 'Сдача и приём денег — без лишних действий.'], tasks: ['Задачи', 'Поручения и результат работы.'], products: ['Каталог', 'Товары и розничные цены.'], users: ['Сотрудники', 'Личные аккаунты и полномочия.'], security: ['История действий', 'Кто, когда и что изменил.'] };
++const titles = { home: ['Главная', 'Главное для вашей работы.'], cash: ['Касса', 'Сдача и приём денег — без лишних действий.'], tasks: ['Задачи', 'Поручения и результат работы.'], products: ['Каталог', 'Карточки, группы, упаковки и поиск.'], users: ['Сотрудники', 'Личные аккаунты и полномочия.'], security: ['История действий', 'Кто, когда и что изменил.'] };
+ titles.finance = ['Финансы', 'Счета, долги, назначения и фактические расчёты.'];
+ titles.procurement = ['Закупки', 'Поставщики, лимиты, заказы и приёмка.'];
+ titles.backups = ['Резервные копии', 'Зашифрованные копии и проверка восстановления.'];
+@@ -139,6 +140,8 @@ async function saveModule(path, page, payload) {
+ const procurementPage = procurementPageFactory({ api, node, button, field, select, surface, modal, formSubmit, rub, time, today, user: () => user, historyModal: modal, save: payload => saveModule('/api/procurement', 'procurement', payload) });
+ const financePage = financePageFactory({ api, node, button, field, select, surface, modal, formSubmit, rub, time, today, user: () => user, notice, save: payload => saveModule('/api/finance', 'finance', payload) });
+ 
++const productsPage = catalogPageFactory({ api, node, button, field, select, surface, modal, formSubmit, rub, user: () => user, notice, save: (path, payload) => saveModule(path, 'products', payload) });
++
+ async function homePage() {
+   const [tasks, cash] = await Promise.all([api('/api/tasks'), canCash() ? api('/api/cash') : []]);
+   const root = node('div'), hello = surface(); hello.append(node('p', roles[user.role], 'eyebrow'), node('h2', `Здравствуйте, ${user.name}`), node('p', 'Откройте нужный раздел. Доступ определяется вашим аккаунтом.', 'fine')); root.append(hello);
+@@ -152,7 +155,7 @@ async function homePage() {
+   if (user.role === 'owner') next.append(node('p', 'Создайте сотрудникам личные аккаунты и назначьте задачи. Для кассовой сдачи выберите кассира; бухгалтер принимает деньги отдельным действием.'), button('Управлять сотрудниками', () => render('users'), 'primary'));
+   else if (user.role === 'cashier') next.append(node('p', 'Заполните отчёты своей смены и укажите, сколько передаёте. Фактически полученные деньги внесёт бухгалтер.'), button('Сдать кассу', () => render('cash'), 'primary'));
+   else next.append(node('p', 'Задачи связывают участников работы. Каталог доступен без финансовых сведений других сотрудников.'), button('Открыть задачи', () => render('tasks'), 'primary'));
+-  next.append(node('p', 'Рабочая область включает аккаунты, кассу, задачи и ручной каталог. Резервные копии доступны владельцу в отдельном разделе. Закупки и финансы доступны владельцу и бухгалтеру. Табель, зарплатные начисления и ИИ ещё не подключены.', 'fine')); root.append(next); return root;
++  next.append(node('p', 'Рабочая область включает аккаунты, кассу, задачи и расширенный ручной каталог. Резервные копии доступны владельцу в отдельном разделе. Закупки и финансы доступны владельцу и бухгалтеру. Табель, зарплатные начисления и ИИ ещё не подключены.', 'fine')); root.append(next); return root;
+ }
+ async function usersPage() {
+   const users = await api('/api/users'), root = surface('Команда');
+@@ -187,21 +190,6 @@ async function taskForm(relatedCash = null) {
+     const requestId = crypto.randomUUID(); formSubmit(f, 'Назначить', async () => { await api('/api/tasks', { ...Object.fromEntries(new FormData(f)), expectedVersion: 0, status: 'open', relatedCash, requestId }); $('modal').close(); notice('Задача сохранена'); if (current === 'tasks') await render('tasks', true); }); modal('Новое поручение', f);
+   } catch (error) { notice(error.message); }
+ }
+-async function productsPage() {
+-  const products = await api('/api/products'), root = surface('Товары'), editable = ['owner', 'administrator'].includes(user.role);
+-  const search = node('input'); search.type = 'search'; search.placeholder = 'Название или штрихкод'; search.setAttribute('aria-label', 'Поиск товара'); search.className = 'search'; root.append(search);
+-  if (editable) root.append(button('Добавить товар', () => productForm(), 'primary'));
+-  const list = node('div'); root.append(list);
+-  function fill() {
+-    list.replaceChildren(); const query = search.value.toLocaleLowerCase('ru'); const rows = products.filter(p => p.name.toLocaleLowerCase('ru').includes(query) || p.barcode.includes(query));
+-    if (!rows.length) list.append(node('p', 'Товары не найдены.', 'empty'));
+-    for (const p of rows) { const row = node('div', null, 'row'), title = node('div', null, 'row-main'); title.append(node('strong', p.name), node('small', p.barcode || 'Без штрихкода')); row.append(title, node('strong', rub(p.price), 'money')); if (editable) row.append(button('Изменить', () => productForm(p))); list.append(row); }
+-  } search.addEventListener('input', fill); fill(); return root;
+-}
+-function productForm(p) {
+-  const f = node('form'); field(f, 'Название', 'name', { value: p?.name ?? '', required: true, maxLength: 150 }); field(f, 'Штрихкод · необязательно', 'barcode', { value: p?.barcode ?? '', inputMode: 'numeric', maxLength: 32 }); field(f, 'Розничная цена, ₽', 'price', { value: p ? String(p.price / 100) : '', inputMode: 'decimal', required: true });
+-  const requestId = crypto.randomUUID(); formSubmit(f, 'Сохранить товар', async () => { const v = Object.fromEntries(new FormData(f)); await api('/api/products', { ...v, price: normalizeAmount(v.price), id: p?.id, expectedVersion: p?.version ?? 0, active: true, requestId }); $('modal').close(); await render('products', true); }); modal(p ? 'Изменить товар' : 'Новый товар', f);
+-}
+ async function securityPage() {
+   const events = await api('/api/security'), root = surface('Журнал');
+   const names = { 'owner.bootstrap': 'Создан владелец', 'account.created': 'Создан аккаунт', 'account.updated': 'Изменены права', 'login.succeeded': 'Вход', 'login.failed': 'Неудачный вход', 'login.throttled': 'Ограничены попытки входа', logout: 'Выход', 'password.changed': 'Изменён пароль', 'cash.submitted': 'Отправлена сдача', 'cash.accepted': 'Принята касса', 'task.changed': 'Изменена задача', 'product.changed': 'Изменён товар' };
+@@ -256,7 +244,7 @@ function backupForm(operation, id) {
+       } else {
+         const result = await api(`/api/backups/${operation}`, payload); f.reset();
+         if (operation === 'restore') {
+-          const done = node('div'); done.append(node('p', 'Отдельная база восстановлена и проверена. Действующая база не заменена.'), node('p', result.path, 'fine'), node('p', `Пользователей: ${result.stats.users}. Сдач: ${result.stats.cash}. Версий: ${result.stats.cashVersions}. Задач: ${result.stats.tasks}. Товаров: ${result.stats.products}. Поставщиков: ${result.stats.suppliers ?? 0}. Лимитов: ${result.stats.budgets ?? 0}. Заказов: ${result.stats.orders ?? 0}. Накладных: ${result.stats.receipts ?? 0}. Разборов: ${result.stats.reviews ?? 0}. Счетов: ${result.stats.moneyAccounts ?? 0}. Долгов: ${result.stats.obligations ?? 0}. Назначений: ${result.stats.paymentPlans ?? 0}. Движений: ${result.stats.moneyMovements ?? 0}. Корректировок: ${result.stats.moneyCorrections ?? 0}. Строк сверки банка: ${result.stats.bankLines ?? 0}.`, 'fine')); $('modal-body').replaceChildren(done);
++          const done = node('div'); done.append(node('p', 'Отдельная база восстановлена и проверена. Действующая база не заменена.'), node('p', result.path, 'fine'), node('p', `Пользователей: ${result.stats.users}. Сдач: ${result.stats.cash}. Версий: ${result.stats.cashVersions}. Задач: ${result.stats.tasks}. Товаров: ${result.stats.products}. Поставщиков: ${result.stats.suppliers ?? 0}. Лимитов: ${result.stats.budgets ?? 0}. Заказов: ${result.stats.orders ?? 0}. Накладных: ${result.stats.receipts ?? 0}. Разборов: ${result.stats.reviews ?? 0}. Счетов: ${result.stats.moneyAccounts ?? 0}. Долгов: ${result.stats.obligations ?? 0}. Назначений: ${result.stats.paymentPlans ?? 0}. Движений: ${result.stats.moneyMovements ?? 0}. Корректировок: ${result.stats.moneyCorrections ?? 0}. Строк сверки банка: ${result.stats.bankLines ?? 0}. Групп: ${result.stats.catalogGroups ?? 0}. Карточек: ${result.stats.catalogProfiles ?? 0}. Соответствий: ${result.stats.catalogAliases ?? 0}.`, 'fine')); $('modal-body').replaceChildren(done);
+         } else { $('modal').close(); notice(operation === 'verify' ? 'Копия расшифрована: структура, связи и расчёты прошли проверку.' : operation === 'disable' ? 'Расписание отключено.' : 'Копия создана и проверена.'); }
+       }
+       if (user) await checkSession();
+diff --git a/way-market/local-app/workspace/catalog.mjs b/way-market/local-app/workspace/catalog.mjs
+new file mode 100644
+index 0000000..cf99f4b
+--- /dev/null
++++ b/way-market/local-app/workspace/catalog.mjs
+@@ -0,0 +1,55 @@
++import { createCatalogSearch } from '/catalog-search.mjs';
++import { defaultProductProfile, catalogNorm } from '/catalog-data.mjs';
++export function catalogPageFactory({ api, node, button, field, select, surface, modal, formSubmit, rub, user, save, notice }) {
++ const decimal = (value, places, optional = false) => { const s = value.trim().replace(',', '.'); if (optional && !s) return null; if (!new RegExp('^\\d{1,9}(\\.\\d{1,'+places+'})?$').test(s)) throw new Error('Проверьте дробные значения'); const [a,b=''] = s.split('.'); return Number(a) * 10 ** places + Number(b.padEnd(places,'0')); };
++ const quantity = n => String(n / 1000), money = n => (n / 100).toFixed(2), values = f => Object.fromEntries(new FormData(f));
++ return async function catalogPage() {
++  const editable = ['owner','administrator'].includes(user().role), matching = ['owner','accountant'].includes(user().role);
++  const [s, suppliers, aliases] = await Promise.all([api('/api/catalog'+(editable?'?all=1':'')), matching ? api('/api/procurement').then(s=>s.suppliers.filter(x=>x.data.active)) : [], matching ? api('/api/catalog/aliases') : []]);
++  const root = surface('Товары'); root.classList.add('catalog-page'); const menu = node('div',null,'button-row');
++  if (editable) menu.append(button('Добавить товар',()=>productForm(), 'primary'),button('Группы',()=>groupMenu()));
++  if (matching) menu.append(button('Сопоставить название',()=>matchForm()),button('Сохранённые соответствия',()=>aliasMenu()));
++  menu.append(button('Каталог покупателя',()=>window.open('/shop','_blank','noopener'))); root.append(menu);
++  const search = node('input'); search.type='search'; search.maxLength=300; search.placeholder='Например: молоко 0,9 л в наличии до 100 рублей'; search.setAttribute('aria-label','Поиск товара'); search.className='search';
++  const group = select(root,'Группа','groupFilter',[['','Все группы'],...s.groups.filter(g=>g.data.active).map(g=>[g.id,g.data.name])]); root.append(search);
++  const status=editable?select(root,'Состояние','productState',[['active','Действующие'],['archived','Архив'],['all','Все']]):null,indexes=new Map(),list=node('div'); root.append(list); for(const warning of s.warnings) root.append(node('p',warning,'error'));
++  function fill(){ list.replaceChildren(); const key=group.value+':'+(status?.value??'active');if(!indexes.has(key))indexes.set(key,createCatalogSearch(s.products.filter(p=>(!group.value||belongs(p.profile.groupId,group.value))&&(!status||status.value==='active'?Boolean(p.active):status.value==='archived'?!p.active:true)),s.groups,{includeInactive:true}));const rows=indexes.get(key)(search.value,{limit:100});
++   if(!rows.length) list.append(node('p','Товары не найдены. Уточните название или признаки.','empty'));
++   for(const r of rows){ const p=r.product,row=node('div',null,'row'),title=node('div',null,'row-main'); title.append(button(p.name,()=>card(p),'catalog-title'),node('small',`${p.profile.cashCode?'Код кассы '+p.profile.cashCode+' · ':''}${p.profile.brand||p.profile.unit}${p.active?'':' · Архив'}`)); row.append(title,node('strong',rub(p.price),'money')); if(editable) row.append(button('Изменить',()=>productForm(p))); for(const w of r.warnings) row.append(node('small',w,'fine')); list.append(row); }
++   list.append(node('p','Показано до 100 результатов. Точное наличие и фасовку проверьте по карточке.','fine'));
++  }
++  function belongs(id,target){ let n=0; while(id && n++<8){if(id===target)return true;id=s.groups.find(g=>g.id===id)?.data.parentId;}return false; }
++  search.addEventListener('input',fill); group.addEventListener('change',fill);status?.addEventListener('change',fill); fill();
++  function submit(f,kind,old,payload,path='/api/catalog'){const requestId=crypto.randomUUID();formSubmit(f,kind==='product'?'Сохранить товар':'Сохранить',()=>save(path,{...payload(),...(kind==='product'?{}:{kind}),id:old?.id,expectedVersion:old?.version??0,requestId}));}
++  function card(p){const d=p.profile,body=node('div');body.append(node('h3',p.name),node('strong',rub(p.price),'amount'),node('p',`${d.unit} · ${d.availability==='available'?'Наличие отмечено':d.availability==='unavailable'?'Отсутствует':'Наличие не проверено'}`));
++   if(d.cashCode){body.append(node('strong',`Код кассы: ${d.cashCode}`),button('Скопировать код',async()=>{try{await navigator.clipboard.writeText(d.cashCode);notice('Код скопирован');}catch{notice('Выделите и скопируйте код вручную');}}));}
++   for(const [label,v]of[['Артикул',d.article],['Бренд',d.brand],['Группа',s.groups.find(g=>g.id===d.groupId)?.data.name]])if(v)body.append(node('p',`${label}: ${v}`));
++   if(d.sizeKind!=='none')body.append(node('p',`Фасовка: ${d.sizeValue} ${d.sizeKind==='volume'?'мл':'г'}`));if(d.fat!==null)body.append(node('p',`Жирность: ${d.fat/100}%`));if(d.description)body.append(node('p',d.description));
++   for(const b of d.barcodes){const pack=d.packages.find(x=>x.id===b.packageId);body.append(node('p',`${b.code} · ${pack?pack.label+' = '+quantity(pack.quantity)+' '+d.unit:'Базовая единица: '+d.unit}`));}
++   for(const p of d.packages)body.append(node('p',`${p.label}: ${quantity(p.quantity)} ${d.unit}`));
++   if(editable)body.append(button('История карточки',async()=>{try{const rows=await api('/api/catalog/history/'+p.id),history=node('div');for(const r of rows){const box=node('details');box.append(node('summary','Версия '+r.version),node('p',r.core?.name??p.name),node('p',r.core?rub(r.core.price):''),node('p',r.reason||'Создание'),node('p','Код кассы: '+(r.data.cashCode||'не задан')),node('p','Штрихкоды: '+r.data.barcodes.map(b=>b.code).join(', ')));history.append(box);}if(!rows.length)history.append(node('p','Расширенная история начнётся после сохранения карточки новой версией.'));modal('История карточки',history);}catch(e){notice(e.message);}}));
++   body.append(node('p','Фасовка товара и количество базовых единиц в упаковке — разные признаки. По названию пересчёт не выполняется.','fine'));modal('Карточка товара',body);
++  }
++  function groupMenu(){const body=node('div');body.append(button('Добавить группу',()=>groupForm(),'primary'));for(const g of s.groups){const row=node('div',null,'row');row.append(node('span',g.data.name+(g.data.active?'':' · Архив')),button('Изменить',()=>groupForm(g)));body.append(row);}modal('Группы каталога',body);}
++  function groupForm(old){const f=node('form');field(f,'Название группы','name',{value:old?.data.name??'',required:true,maxLength:100});select(f,'Внутри группы','parentId',[['','Корневая группа'],...s.groups.filter(g=>g.id!==old?.id&&g.data.active).map(g=>[g.id,g.data.name])],old?.data.parentId??'');select(f,'Состояние','active',[['yes','Действует'],['no','Архив']],old?.data.active===false?'no':'yes');if(old)field(f,'Причина изменения','reason',{required:true,maxLength:500});submit(f,'group',old,()=>({...values(f),parentId:f.elements.parentId.value||null,active:f.elements.active.value==='yes'}));modal('Группа товара',f);}
++  function productForm(old){const d=old?.profile??defaultProductProfile(),f=node('form');
++   field(f,'Название','name',{value:old?.name??'',required:true,maxLength:150});field(f,'Розничная цена, ₽','price',{value:old?money(old.price):'',required:true,inputMode:'decimal'});field(f,'Основной штрихкод · необязательно','barcode',{value:old?.barcode??'',inputMode:'numeric',maxLength:32});
++   select(f,'Группа','groupId',[['','Без группы'],...s.groups.filter(g=>g.data.active||g.id===d.groupId).map(g=>[g.id,g.data.name])],d.groupId??'');field(f,'Код кассы','cashCode',{value:d.cashCode,maxLength:40});field(f,'Артикул','article',{value:d.article,maxLength:60});field(f,'Бренд','brand',{value:d.brand,maxLength:100});select(f,'Базовая единица','unit',[['шт','шт'],['кг','кг'],['л','л'],['м','м']],d.unit);select(f,'Весовой товар','weighted',[['no','Нет'],['yes','Да, продаётся на вес в кг']],d.weighted?'yes':'no');
++   select(f,'Размер фасовки','sizeKind',[['none','Не указан'],['mass','Масса, г'],['volume','Объём, мл']],d.sizeKind);field(f,'Масса / объём одной единицы, целые г / мл','sizeValue',{value:d.sizeKind==='none'?'':String(d.sizeValue),inputMode:'numeric'});field(f,'Жирность, % · необязательно','fat',{value:d.fat===null?'':String(d.fat/100),inputMode:'decimal'});
++   select(f,'Наличие','availability',[['unknown','Не проверено'],['available','В наличии'],['unavailable','Отсутствует']],d.availability);select(f,'Каталог покупателя','published',[['no','Не показывать'],['yes','Показывать розничную карточку']],d.published?'yes':'no');select(f,'Состояние товара','active',[['yes','Действует'],['no','Архив']],old?.active===0?'no':'yes');field(f,'Описание для покупателя','description',{value:d.description,maxLength:1000});
++   const packs=node('div'),bars=node('div'),packRows=[],barRows=[];f.append(node('h3','Упаковки'),packs);const primary=select(f,'Упаковка основного штрихкода','primaryPackageId',[['','Базовая единица']],d.barcodes[0]?.packageId??'');
++   function options(control,selected=control.value){control.replaceChildren();for(const[id,title]of[['','Базовая единица'],...packRows.filter(x=>!x.removed).map(x=>[x.id,x.label.value||'Новая упаковка'])]){const o=node('option',title);o.value=id;control.append(o);}control.value=selected;}
++   function refresh(){options(primary);for(const b of barRows)if(!b.removed)options(b.pack);}
++   function addPack(p={}){const row=surface(),id=p.id??crypto.randomUUID(),label=field(row,'Название упаковки','packLabel',{value:p.label??'',required:true,maxLength:50}),q=field(row,'Базовых единиц в упаковке','packQuantity',{value:p.quantity?quantity(p.quantity):'',required:true,inputMode:'decimal'}),entry={id,label,q,removed:false};packRows.push(entry);label.addEventListener('input',refresh);row.append(button('Убрать упаковку',()=>{if(primary.value===id||barRows.some(b=>!b.removed&&b.pack.value===id)){notice('Сначала измените упаковку связанных штрихкодов');return;}entry.removed=true;row.remove();refresh();}));packs.append(row);refresh();}
++   function addBar(b={}){const row=surface(),code=field(row,'Дополнительный штрихкод','extraBarcode',{value:b.code??'',required:true,inputMode:'numeric',maxLength:32}),pack=select(row,'Единица штрихкода','barcodePackageId',[['','Базовая единица']]),entry={code,pack,removed:false};barRows.push(entry);options(pack,b.packageId??'');row.append(button('Убрать штрихкод',()=>{entry.removed=true;row.remove();}));bars.append(row);}
++   for(const p of d.packages)addPack(p);options(primary,d.barcodes[0]?.packageId??'');f.append(button('Добавить упаковку',()=>addPack()),node('h3','Другие штрихкоды'),bars,button('Добавить штрихкод',()=>addBar()));for(const b of d.barcodes.slice(1))addBar(b);
++   if(old)field(f,'Причина изменения','reason',{required:true,maxLength:500});
++   submit(f,'product',old,()=>{const v=values(f),barcodes=[...(v.barcode?[{code:v.barcode,packageId:primary.value||null}]:[]),...barRows.filter(b=>!b.removed).map(b=>({code:b.code.value,packageId:b.pack.value||null}))];if(!v.barcode&&barcodes.length)throw new Error('Сначала укажите основной штрихкод');if(v.sizeKind!=='none'&&!/^\d{1,9}$/.test(v.sizeValue))throw new Error('Введите размер целыми граммами или миллилитрами');return{name:v.name,price:v.price,barcode:v.barcode,active:v.active==='yes',reason:v.reason,profile:{groupId:v.groupId||null,cashCode:v.cashCode,article:v.article,brand:v.brand,unit:v.unit,weighted:v.weighted==='yes',sizeKind:v.sizeKind,sizeValue:v.sizeKind==='none'?0:Number(v.sizeValue),fat:decimal(v.fat,2,true),availability:v.availability,published:v.published==='yes',description:v.description,packages:packRows.filter(p=>!p.removed).map(p=>({id:p.id,label:p.label.value,quantity:decimal(p.q.value,3)})),barcodes}};},'/api/products');modal(old?'Изменить товар':'Новый товар',f);
++  }
++  function matchForm(){if(!suppliers.length){modal('Нужен поставщик',node('p','Добавьте действующего поставщика в закупках.'));return;}const f=node('form');select(f,'Поставщик','supplierId',suppliers.map(s=>[s.id,s.data.name]));field(f,'Название точно как в накладной','sourceName',{required:true,maxLength:300});field(f,'Штрихкод из документа · необязательно','sourceBarcode',{inputMode:'numeric',maxLength:32});const results=node('div');formSubmit(f,'Найти варианты',async()=>{const supplierId=f.elements.supplierId.value,sourceName=f.elements.sourceName.value;const reply=await api('/api/catalog/suggest',{supplierId,sourceName,barcode:f.elements.sourceBarcode.value});results.replaceChildren(node('p',reply.note,'fine'));
++    for(const m of reply.matches){const box=surface(m.product.name);box.append(node('p',`${m.score} баллов сходства · ${rub(m.product.price)}`));for(const x of[...m.reasons,...m.warnings])box.append(node('p',x,m.warnings.includes(x)?'error':'fine'));box.append(button('Проверить и выбрать',()=>confirmAlias(supplierId,sourceName,reply.supplierVersion,m)));results.append(box);}if(!reply.matches.length)results.append(node('p','Подходящих вариантов нет. Уточните признаки или создайте товар.'));});f.append(results);modal('Сопоставление наименований',f);}
++  function aliasMenu(){const body=node('div');for(const a of aliases){const box=surface(a.data.sourceName);box.append(node('p',suppliers.find(s=>s.id===a.data.supplierId)?.data.name??'Поставщик'),node('p',s.products.find(p=>p.id===a.data.productId)?.name??'Товар в архиве'));if(a.data.active)box.append(button('Отключить соответствие',()=>{const f=node('form');f.append(node('p',a.data.sourceName,'source-name'));field(f,'Причина изменения','reason',{required:true,maxLength:500});submit(f,'alias',a,()=>({...a.data,...values(f),productVersion:a.productVersion,supplierVersion:a.supplierVersion,active:false,confirmed:true}));modal('Отключение соответствия',f);}));else box.append(node('p','Соответствие отключено','fine'));body.append(box);}if(!aliases.length)body.append(node('p','Подтверждённых соответствий пока нет.'));modal('Память сопоставлений',body);}
++  function confirmAlias(supplierId,sourceName,supplierVersion,m){const old=aliases.find(a=>a.data.supplierId===supplierId&&catalogNorm(a.data.sourceName)===catalogNorm(sourceName)),f=node('form');f.append(node('p',sourceName,'source-name'),node('strong',m.product.name));for(const w of m.warnings)f.append(node('p',w,'error'));select(f,'Единица поставщика соответствует','packageId',[['','Базовой единице '+m.product.profile.unit],...m.product.profile.packages.map(p=>[p.id,p.label+' = '+quantity(p.quantity)+' '+m.product.profile.unit])],m.packageId??'');select(f,'Подтверждение','confirmed',[['no','Сначала проверить товар и упаковку'],['yes','Проверено мной, сохранить соответствие']]);if(old)field(f,'Причина изменения','reason',{required:true,maxLength:500});submit(f,'alias',old,()=>({...values(f),sourceName,supplierId,supplierVersion,productId:m.product.id,productVersion:m.product.version,packageId:f.elements.packageId.value||null,active:true,confirmed:f.elements.confirmed.value==='yes'}));modal('Подтверждение соответствия',f);}
++  return root;
++ };
++}
+diff --git a/way-market/local-app/workspace/shop.html b/way-market/local-app/workspace/shop.html
+new file mode 100644
+index 0000000..91f0269
+--- /dev/null
++++ b/way-market/local-app/workspace/shop.html
+@@ -0,0 +1 @@
++<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Way Market · Каталог покупателя</title><link rel="stylesheet" href="/workspace.css"><script type="module" src="/shop.mjs"></script></head><body><main class="shop-main"><h1>Way Market</h1><p>Каталог покупателя</p><p class="fine">Цены и наличие требуют подтверждения в магазине. Список не создаёт заказ или платёж.</p><label>Поиск товара<input id="search" type="search" maxlength="300" placeholder="Молоко 0,9 л до 100 рублей"></label><p id="status" role="status"></p><section class="surface"><h2>Товары</h2><div id="products"></div></section><section class="surface"><h2>Мой список</h2><div id="list"></div><p id="total"></p><button id="copy" class="primary" type="button">Скопировать список</button><p class="fine">Список хранится в памяти этой страницы. После перезагрузки его нужно составить заново.</p></section></main></body></html>
+diff --git a/way-market/local-app/workspace/shop.mjs b/way-market/local-app/workspace/shop.mjs
+new file mode 100644
+index 0000000..91056a4
+--- /dev/null
++++ b/way-market/local-app/workspace/shop.mjs
+@@ -0,0 +1,10 @@
++import { createCatalogSearch } from '/catalog-search.mjs';
++const $=id=>document.getElementById(id), node=(tag,text)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e;},rub=n=>new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB'}).format(n/100),cart=new Map();let catalog={products:[],groups:[]},search=()=>[];
++const button=(label,fn)=>{const e=node('button',label);e.type='button';e.addEventListener('click',fn);return e;};
++function renderProducts(){ $('products').replaceChildren();const rows=search($('search').value);if(!rows.length)$('products').append(node('p','Товары не найдены или ещё не опубликованы.'));for(const {product:p}of rows){const row=node('div');row.className='row';const info=node('div');info.className='row-main';info.append(node('strong',p.name),node('small',`${rub(p.price)} / ${p.unit} · ${p.availability==='available'?'Наличие отмечено':p.availability==='unavailable'?'Отсутствует':'Наличие не проверено'}`));row.append(info,button('В список',()=>{if(!cart.has(p.id))cart.set(p.id,'1');renderCart();}));$('products').append(row);}}
++function count(s,unit){const v=s.trim().replace(',','.');if(!/^\d{1,6}(\.\d{1,3})?$/.test(v))throw new Error('Проверьте количество');const[a,b='']=v.split('.'),q=BigInt(a)*1000n+BigInt(b.padEnd(3,'0'));if(q<1n||q>999999999n||unit==='шт'&&q%1000n)throw new Error('Для штучного товара укажите целое количество');return q;}
++function listText(){let total=0n,lines=[];for(const[id,v]of cart){const p=catalog.products.find(p=>p.id===id),q=count(v,p.unit),amount=(q*BigInt(p.price)+500n)/1000n;total+=amount;if(total>99999999999n)throw new Error('Слишком большая сумма списка');lines.push(`${p.name} — ${v} ${p.unit}, ${rub(Number(amount))}`);}return [...lines,`Предварительный итог: ${rub(Number(total))}`,'Цены и наличие нужно подтвердить в магазине.'];}
++function renderCart(){ $('list').replaceChildren();for(const[id,v]of cart){const p=catalog.products.find(p=>p.id===id),row=node('div'),label=node('label',p.name+' · '+p.unit),input=node('input');input.value=v;input.inputMode='decimal';input.setAttribute('aria-label','Количество '+p.name);input.addEventListener('input',()=>{cart.set(id,input.value);updateTotal();});label.append(input);row.append(label,button('Убрать',()=>{cart.delete(id);renderCart();}));$('list').append(row);}updateTotal();}
++function updateTotal(){try{$('total').textContent=listText().at(-2);$('copy').disabled=cart.size===0;}catch(e){$('total').textContent=e.message;$('copy').disabled=true;}}
++$('search').addEventListener('input',()=>{try{renderProducts();}catch(e){$('status').textContent=e.message;}});$('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(listText().join('\n'));$('status').textContent='Список скопирован. Сообщение или заказ автоматически не отправлялись.';}catch{$('status').textContent='Не удалось скопировать. Выделите текст списка вручную.';}});
++try{const response=await fetch('/api/shop/catalog');if(!response.ok)throw new Error('Каталог недоступен');catalog=await response.json();search=createCatalogSearch(catalog.products,catalog.groups);renderProducts();renderCart();}catch(e){$('status').textContent=e.message;}
+diff --git a/way-market/local-app/workspace/style.css b/way-market/local-app/workspace/style.css
+index f50db89..ce8c5af 100644
+--- a/way-market/local-app/workspace/style.css
++++ b/way-market/local-app/workspace/style.css
+@@ -10,3 +10,5 @@
+ .procurement-page .surface{margin-bottom:20px}.procurement-page summary{overflow-wrap:anywhere}.procurement-page .row-main{min-width:0;overflow-wrap:anywhere}@media(max-width:760px){.procurement-page .row{flex-wrap:wrap}.procurement-page .row-main{flex-basis:100%}.procurement-page .row>button{flex:1}.procurement-page .row-main strong{font-size:17px}}
+ 
+ .finance-page .surface{margin-bottom:20px}.finance-page summary{overflow-wrap:anywhere}.finance-page .row-main{min-width:0;overflow-wrap:anywhere}.finance-page .row>.error{flex-basis:100%}@media(max-width:760px){.finance-page .row{flex-wrap:wrap}.finance-page .row-main{flex-basis:100%}.finance-page .row>button{flex:1}}
++
++.catalog-page .button-row{margin-bottom:18px}.catalog-title{background:transparent;padding:0;color:inherit;text-align:left;font-weight:650;font-size:17px}.catalog-page .row-main{min-width:0;overflow-wrap:anywhere}.catalog-page .row>small{flex-basis:100%}.source-name{white-space:pre-wrap;overflow-wrap:anywhere}.shop-main{max-width:950px;margin:0 auto;padding:25px 20px}.shop-tools{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}@media(max-width:760px){.catalog-page .row{flex-wrap:wrap}.catalog-page .row-main{flex-basis:100%}.catalog-page .row>button{margin-left:auto}}
