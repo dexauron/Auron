@@ -278,7 +278,9 @@ function bindEvents() {
 
   function openLogin() {
     // email виден сразу, только если служебные аккаунты не настроены в config.js
-    $('loginEmailWrap').hidden = !!(CFG.STAFF_EMAIL || (CFG.SERVICE_EMAILS && CFG.SERVICE_EMAILS.length));
+    const fileLogin = !!(CFG.STATIC_URL || ghConfigured());
+    $('loginEmailWrap').hidden = fileLogin || !!(CFG.STAFF_EMAIL || (CFG.SERVICE_EMAILS && CFG.SERVICE_EMAILS.length));
+    if (fileLogin) $('loginHint').textContent = 'Введи пароль владельца или сотрудника каталога. После смены паролей используй новый пароль.';
     $('loginError').hidden = true;
     openSheet('loginSheet');
   }
@@ -719,8 +721,13 @@ function bindEvents() {
         }
         $('loginError').textContent = err.message === 'SECURITY_UPGRADE_REQUIRED'
           ? 'Владелец должен один раз обновить защиту каталога: войти и сменить пароли владельца и сотрудника.'
-          : err.code === 'NETWORK' ? 'Нет связи. Подключись к интернету и повтори вход.'
-            : 'Пароль не подошёл или данные каталога повреждены. Проверь пароль и повтори вход.';
+          : err.message === 'BAD_PASSWORD' ? 'Пароль каталога не подошёл. Если менял пароли, введи новый.'
+            : err.message === 'CATALOG_CHANGED' ? 'Каталог обновился во время входа. Повтори вход.'
+              : err.message === 'COMPRESSION_UNAVAILABLE' ? 'Браузер не умеет распаковывать каталог. Обнови браузер.'
+                : err.code === 'NETWORK' ? 'Нет связи с GitHub. Подключись к интернету и повтори вход.'
+                  : err.code === 'ACCESS' ? 'GitHub не разрешил скачать каталог. Повтори вход позже.'
+                    : err.passwordAccepted ? 'Пароль принят, но не удалось прочитать защищённые данные каталога. Обнови страницу и повтори вход.'
+                      : 'Не удалось прочитать настройки доступа каталога. Повтори вход.';
         $('loginError').hidden = false;
         return;
       }

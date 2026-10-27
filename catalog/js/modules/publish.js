@@ -295,9 +295,11 @@ async function rawExists(file) {
 }
 // Кусок читаем с подписью в адресе: изменился — скачается заново, не изменился
 // — придёт из кэша браузера. Так вход после мелкой правки не тянет весь каталог.
-async function fetchPart(file, h) {
+async function fetchPart(file, h, keyTag) {
   let r;
-  try { r = await fetch(rawUrl(file) + '?h=' + h); } catch (e) { const err = new Error('Нет связи с каталогом'); err.code = 'NETWORK'; throw err; }
+  // Один plaintext-hash при смене ключа соответствует ДРУГОМУ шифртексту.
+  // Конверт роли меняется вместе с ключом; его публичная подпись разделяет кэш.
+  try { r = await fetch(rawUrl(file) + '?h=' + h + '&k=' + keyTag); } catch (e) { const err = new Error('Нет связи с каталогом'); err.code = 'NETWORK'; throw err; }
   if (!r.ok) { const err = new Error('Не удалось скачать часть каталога (' + r.status + ')'); err.code = r.status >= 500 ? 'NETWORK' : 'ACCESS'; throw err; }
   return r.text();
 }
@@ -342,11 +344,12 @@ export function passwordProblem(password) {
     ? 'Новый пароль — от 12 до 1024 символов. Используй длинную уникальную фразу.' : '';
 }
 
-async function readRoleCatalog(key, role, version, manifestOnly = false) {
+async function readRoleCatalog(key, role, version, manifestOnly = false, keyTag = '') {
   const spec = ROLE_FILES[role];
-  if (!spec) throw new Error('INVALID_CATALOG');
+  if (!spec || (!manifestOnly && !/^[a-f0-9]{16,64}$/.test(keyTag))) throw new Error('INVALID_CATALOG');
   const raw = await fetchRaw(spec.manifest);
-  if (raw == null) throw new Error('NO_SECRET');
+  // Файл ключей уже существует: потеря описи не является первым запуском.
+  if (raw == null) throw new Error('INVALID_CATALOG');
   const context = (file) => version === 4 ? roleContext(role, file) : '';
   const mani = await keyDecrypt(key, raw, context('manifest'));
   if (!mani || !mani.head || !mani.sets || (version === 4 && (mani.v !== 4 || mani.role !== role))) throw new Error('INVALID_CATALOG');
@@ -357,7 +360,7 @@ async function readRoleCatalog(key, role, version, manifestOnly = false) {
     if (!set || set.n !== s.n || !Array.isArray(set.h) || set.h.length !== s.n
       || !set.h.every((h) => typeof h === 'string' && /^[a-f0-9]{16,64}$/.test(h))) throw new Error('INVALID_CATALOG');
     const chunks = await pool(Array.from({ length: set.n }, (_, i) => i), 6, async (i) => {
-      const rows = await keyDecrypt(key, await fetchPart(`${spec.dir}/${s.name}-${partName(i)}.enc`, set.h[i]), context(`${s.name}/${i}`));
+      const rows = await keyDecrypt(key, await fetchPart(`${spec.dir}/${s.name}-${partName(i)}.enc`, set.h[i], keyTag), context(`${s.name}/${i}`));
       if (!Array.isArray(rows)) throw new Error('INVALID_CATALOG');
       // Ветка могла обновиться между чтением описи и частей. Проверяем подпись
       // расшифрованного содержимого, чтобы не смешать две версии каталога.
@@ -388,7 +391,9 @@ async function openCatalog(password) {
   // Старый общий ключ не выдаём сотруднику: сначала владелец публикует v4.
   if (ks.v === 3 && role === 'staff') throw new Error('SECURITY_UPGRADE_REQUIRED');
   const key = await importCatalogKey(raw);
-  const { mani, data } = await readRoleCatalog(key, role, ks.v);
+  let mani, data;
+  try { ({ mani, data } = await readRoleCatalog(key, role, ks.v, false, await digest(JSON.stringify(ks[role])))); }
+  catch (e) { e.passwordAccepted = true; throw e; }
   _cat = { version: ks.v, key, role, mani, keys: ks, staff: null, staffPassword: data.staffPassword || null };
   state.securityNeedsUpgrade = ks.v !== 4;
   return { data, role };
@@ -625,7 +630,7 @@ export async function restoreSession() {
     if (keysRaw == null) throw new Error('BAD_PASSWORD');
     keys = JSON.parse(keysRaw);
     if (keys.v !== device.version || !keys[device.role] || await digest(JSON.stringify(keys[device.role])) !== device.tag) throw new Error('BAD_PASSWORD');
-    ({ data, mani } = await readRoleCatalog(device.key, device.role, device.version));
+    ({ data, mani } = await readRoleCatalog(device.key, device.role, device.version, false, device.tag));
   } catch (e) {
     if (e.code !== 'NETWORK') { await clearSvAuth(); return false; }
     // Без сети отзыв узнать нельзя. Доступ даёт проверенный ключ к своей копии,
