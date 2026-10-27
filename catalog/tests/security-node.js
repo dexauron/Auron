@@ -63,6 +63,13 @@ function harness() {
   check(lostKeys,'потерянные ключи не превращают существующий каталог в первую настройку');
   await h.api.publishFull('fixture-owner-password');
   const keys = JSON.parse(h.files.get('data/keys.json'));
+  const existingManifest = h.files.get('data/catalog.enc');
+  h.files.delete('data/catalog.enc');
+  let missingManifest = false;
+  try { await h.api.unlockSecret('fixture-owner-password'); }
+  catch(e) { missingManifest = e.message === 'INVALID_CATALOG' && e.passwordAccepted === true; }
+  check(missingManifest, 'при известном ключе потеря описи не разрешает первую настройку и не объявляется неверным паролем');
+  h.files.set('data/catalog.enc', existingManifest);
   check(keys.v===4, 'публикация использует раздельные наборы v4');
   check(h.files.has('data/staff-catalog.enc') && [...h.files.keys()].some(k=>k.includes('/sec-staff/')), 'для сотрудника есть отдельная опись и части');
   const C = h.ctx.cryptoTest;
