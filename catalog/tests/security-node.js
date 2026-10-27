@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { webcrypto, createHash } = require('node:crypto');
+const { legacyCatalogFiles, legacyWholeFile } = require('./fixtures/legacy-crypto.cjs');
 
 const root = path.join(__dirname, '..');
 function harness() {
@@ -16,7 +17,8 @@ function harness() {
   const local = new Map();
   const ctx = { state, ui: { secretPw: 'fixture-owner-password' },
     CFG: { DATA_PATH: 'data', STATIC_URL: 'data/', GITHUB_OWNER: 'fixture', GITHUB_REPO: 'fixture' },
-    crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, btoa, atob, URL, setTimeout, clearTimeout, networkDown: false,
+    crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, btoa, atob, URL, Blob, Response,
+    CompressionStream, DecompressionStream, setTimeout, clearTimeout, networkDown: false,
     console, structuredClone, requestIdleCallback: () => {},
     $: () => ({ hidden: false, classList: { toggle() {} } }),
     localStorage: { getItem: k => local.get(k) || null, setItem: (k,v) => local.set(k,v), removeItem: k => local.delete(k) },
@@ -122,39 +124,16 @@ function harness() {
 
   // Переход с настоящего прежнего формата: один ключ, PBKDF2 150 000,
   // части v1 без контекста. Старые файлы генерируем независимо от нового кода.
-  const legacy = harness(), keyBytes=webcrypto.getRandomValues(new Uint8Array(32));
-  const oldKey=await webcrypto.subtle.importKey('raw',keyBytes,'AES-GCM',false,['encrypt']);
-  const b64=x=>Buffer.from(x).toString('base64');
-  const oldEncrypt=async obj=>{
-    const iv=webcrypto.getRandomValues(new Uint8Array(12));
-    const data=await webcrypto.subtle.encrypt({name:'AES-GCM',iv},oldKey,new TextEncoder().encode(JSON.stringify(obj)));
-    return JSON.stringify({v:1,z:null,iv:b64(iv),data:b64(data)});
-  };
-  const oldWrap=async pw=>{
-    const salt=webcrypto.getRandomValues(new Uint8Array(16)),iv=webcrypto.getRandomValues(new Uint8Array(12));
-    const base=await webcrypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
-    const k=await webcrypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:150000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt']);
-    return {kdf:'PBKDF2',iter:150000,salt:b64(salt),iv:b64(iv),data:b64(await webcrypto.subtle.encrypt({name:'AES-GCM',iv},k,keyBytes))};
-  };
-  const oldKeys={v:3,owner:await oldWrap('old-owner-fixture'),staff:await oldWrap('old-staff-fixture')};
-  legacy.files.set('data/keys.json',JSON.stringify(oldKeys));
-  const oldHead={groups:[],suppliers:legacy.state.suppliers,contacts:legacy.state.contacts,staffPassword:'old-staff-fixture',requests:legacy.state.requests};
-  const oldSets={};
-  for(const [name,count] of [['products',24],['prices',12],['sales',6]]){
-    const hashes=[];
-    for(let i=0;i<count;i++){
-      const rows=i===0?(legacy.state[name]||[]):[];
-      hashes.push(createHash('sha256').update(JSON.stringify(rows)).digest('hex').slice(0,16));
-      legacy.files.set(`data/sec/${name}-${String(i).padStart(2,'0')}.enc`,await oldEncrypt(rows));
-    }
-    oldSets[name]={n:count,h:hashes};
-  }
-  legacy.files.set('data/catalog.enc',await oldEncrypt({v:3,head:oldHead,sets:oldSets}));
+  const legacy = harness();
+  const oldSnapshot={products:legacy.state.products,prices:legacy.state.prices,sales:[],groups:[],
+    suppliers:legacy.state.suppliers,contacts:legacy.state.contacts,requests:legacy.state.requests};
+  const legacyFiles=await legacyCatalogFiles(oldSnapshot,'old-owner-fixture','old-staff-fixture');
+  for(const [name,body] of legacyFiles) legacy.files.set(name,body);
   let oldStaffBlocked=false;
   try{await legacy.api.unlockStaff('old-staff-fixture')}catch(e){oldStaffBlocked=e.message==='SECURITY_UPGRADE_REQUIRED'}
   check(oldStaffBlocked,'общий ключ v3 не выдаётся сотруднику до перехода владельца');
   await legacy.api.unlockSecret('old-owner-fixture');
-  check(legacy.state.products.length===1&&legacy.state.prices[0].price===123,'владелец читает прежние конверты 150 000 без потери данных');
+  check(legacy.state.products.length===1&&legacy.state.prices[0].price===123,'владелец читает настоящий формат v3: gzip, отсутствие v/alg, PBKDF2 150 000');
   legacy.state.staffPassword='new-staff-fixture';
   await legacy.api.publishFull('new-owner-fixture',{rotate:true});
   check(JSON.parse(legacy.files.get('data/keys.json')).v===4,'успешная публикация переводит v3 в v4');
@@ -162,6 +141,20 @@ function harness() {
   check(legacy.state.products[0].id==='p1'&&legacy.state.prices[0].price===123&&legacy.state.requests.length===1,'после перехода у владельца сохранены id, цена и заявки');
   await legacy.api.unlockStaff('new-staff-fixture');
   check(legacy.state.products[0].id==='p1'&&legacy.state.prices[0].price===123&&legacy.state.requests.length===0,'после перехода сотрудник получает разрешённые данные своего набора');
+  const uncompressed=harness();
+  for(const [name,body] of await legacyCatalogFiles(oldSnapshot,'old-owner-fixture','old-staff-fixture',{compress:false})) uncompressed.files.set(name,body);
+  await uncompressed.api.unlockSecret('old-owner-fixture');
+  check(uncompressed.state.products[0].code==='001','прежние части без v и без сжатия тоже читаются');
+  for(const compress of [true,false]){
+    const whole=harness();
+    whole.files.set('data/secret-catalog.enc',await legacyWholeFile(oldSnapshot,'old-owner-fixture',compress));
+    await whole.api.unlockSecret('old-owner-fixture');
+    check(whole.state.products[0].code==='001'&&whole.state.prices[0].price===123,`прежний цельный файл читается: ${compress?'gzip':'без сжатия'}`);
+  }
+  const noVersion=JSON.parse(h.files.get('data/catalog.enc'));delete noVersion.v;
+  let noDowngrade=false;
+  try{await C.keyDecrypt(ownerKey,noVersion,'wm.catalog.v4/owner/manifest')}catch(e){noDowngrade=e.message==='INVALID_CATALOG'}
+  check(noDowngrade,'допуск прежней оболочки без v не действует на контекст v4');
   console.log(`ПРОВЕРОК: ${total}; ОШИБОК: ${bad}`);
   process.exitCode = bad?1:0;
 })().catch(e=>{console.error(e);process.exitCode=1;});

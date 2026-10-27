@@ -36,14 +36,17 @@ export async function keyEncrypt(key, obj, context = '') {
 }
 export async function keyDecrypt(key, blob, context = '') {
   const env = typeof blob === 'string' ? JSON.parse(blob) : blob;
-  if (!env || ![1, 2].includes(env.v) || (context && env.v !== 2) || (env.alg && env.alg !== 'AES-GCM')
-    || (env.z != null && env.z !== 'gz')) throw new Error('INVALID_CATALOG');
+  // Прежний writer v3 не писал v/alg в оболочку части и помечал сжатие 'gzip'.
+  // Этот допуск действует только без контекста; v4 по-прежнему требует v: 2.
+  const legacy = !context && env && env.v === undefined;
+  if (!env || (!legacy && ![1, 2].includes(env.v)) || (context && env.v !== 2) || (env.alg && env.alg !== 'AES-GCM')
+    || (env.z != null && env.z !== 'gz' && env.z !== 'gzip')) throw new Error('INVALID_CATALOG');
   const ct = cryptoBytes(env.data);
   if (ct.length < 16) throw new Error('INVALID_CATALOG');
   let plain;
   try { plain = new Uint8Array(await crypto.subtle.decrypt(cipherOptions(cryptoBytes(env.iv, 12), context), key, ct)); }
   catch (e) { throw new Error('INVALID_CATALOG'); }
-  if (env.z === 'gz') {
+  if (env.z === 'gz' || env.z === 'gzip') {
     if (!gzipAvailable) throw new Error('COMPRESSION_UNAVAILABLE');
     plain = new Uint8Array(await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
   }
