@@ -22,6 +22,8 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
   const b = await chromium.launch();
   const { chk, done } = runner('СКОРОСТЬ НА СЛАБОМ ТЕЛЕФОНЕ');
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  await ctx.route('**/data/index.json*', (r) => r.fulfill({ status: 404, body: 'fixture: legacy products' }));
+  await ctx.route('**/data/p/*.json*', (r) => r.abort('blockedbyclient'));
   await ctx.addInitScript(() => {
     localStorage.setItem('wm_gh_token', 'tok');
     // телефон «сообщает» о себе как бюджетный — должен включиться экономный режим

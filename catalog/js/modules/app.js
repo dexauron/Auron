@@ -8,7 +8,7 @@ import { addRecentQuery, choosePick, clearAllFilters, closeLightbox, deviceId, i
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
-import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
+import { restoreSession, rememberSession, passwordProblem, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, findProductPhoto, isOwner, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
@@ -526,21 +526,26 @@ function bindEvents() {
   // тот, кто знал прежний пароль, продолжил бы открывать каталог.
   $('menuOwnerPass').addEventListener('click', () => {
     closeSheet('adminMenuSheet');
-    $('ownerPassNew').value = ''; $('ownerPassAgain').value = '';
+    $('ownerPassNew').value = ''; $('ownerPassAgain').value = ''; $('ownerPassStaff').value = '';
     $('ownerPassError').hidden = true;
     openSheet('ownerPassSheet');
   });
   $('ownerPassForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const pw = $('ownerPassNew').value.trim();
-    const again = $('ownerPassAgain').value.trim();
+    const pw = $('ownerPassNew').value;
+    const again = $('ownerPassAgain').value;
+    const staffPw = $('ownerPassStaff').value;
     const err = $('ownerPassError');
     const btn = $('ownerPassSubmit');
     err.hidden = true;
-    if (pw.length < 4) { err.textContent = 'Пароль — минимум 4 символа.'; err.hidden = false; return; }
+    if (passwordProblem(pw)) { err.textContent = passwordProblem(pw); err.hidden = false; return; }
     if (pw !== again) { err.textContent = 'Пароли не совпали.'; err.hidden = false; return; }
+    if (state.securityNeedsUpgrade && state.staffPassword && !staffPw) { err.textContent = 'Для обновления защиты задай также новый пароль сотрудника.'; err.hidden = false; return; }
+    if (staffPw && passwordProblem(staffPw)) { err.textContent = passwordProblem(staffPw); err.hidden = false; return; }
     if (!ghConfigured()) { err.textContent = 'Нужен ключ публикации: меню → «Публикация на GitHub».'; err.hidden = false; return; }
     btn.disabled = true; btn.textContent = 'Перешифровываю…';
+    const previousStaff = state.staffPassword;
+    if (staffPw) state.staffPassword = staffPw;
     try {
       await publishFull(pw, { rotate: true, onProgress: (d, t) => { btn.textContent = `Перешифровываю… ${d} из ${t}`; } });
       ui.secretPw = pw;
@@ -548,6 +553,7 @@ function bindEvents() {
       closeSheet('ownerPassSheet');
       toast('Пароль каталога сменён');
     } catch (e2) {
+      state.staffPassword = previousStaff;
       err.textContent = 'Не удалось: ' + (e2.message || e2);
       err.hidden = false;
     } finally { btn.disabled = false; btn.textContent = 'Сменить пароль'; }
@@ -563,21 +569,23 @@ function bindEvents() {
 
   $('staffPassForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const pass = $('newStaffPass').value.trim();
+    const pass = $('newStaffPass').value;
     const btn = $('staffPassSubmit');
     $('staffPassError').hidden = true;
     // Серверлес: пароль сотрудника задаёт владелец. Сохраняем в его каталог и
     // публикуем отдельный файл сотрудника (закупка/контакты, без «Ходовых»).
     if (state.serverless) {
-      if (!pass || pass.length < 4) { $('staffPassError').textContent = 'Пароль сотрудника — минимум 4 символа.'; $('staffPassError').hidden = false; return; }
-      if (!ui.secretPw) { $('staffPassError').textContent = 'Задать пароль сотрудника может только владелец.'; $('staffPassError').hidden = false; return; }
+      if (passwordProblem(pass)) { $('staffPassError').textContent = passwordProblem(pass); $('staffPassError').hidden = false; return; }
+      if (!state.isAdmin) { $('staffPassError').textContent = 'Задать пароль сотрудника может только владелец.'; $('staffPassError').hidden = false; return; }
       btn.disabled = true; btn.textContent = 'Сохраняем…';
+      const previous = state.staffPassword;
       state.staffPassword = pass;
       try {
         await publishFull(ui.secretPw);
         closeSheet('staffPassSheet');
         toast('Пароль сотрудника сохранён Теперь сотрудник входит этим паролем');
       } catch (err) {
+        state.staffPassword = previous;
         $('staffPassError').textContent = err.friendly || 'Не удалось опубликовать.';
         $('staffPassError').hidden = false;
       } finally { btn.disabled = false; btn.textContent = 'Сохранить'; }
@@ -616,7 +624,7 @@ function bindEvents() {
   // открывать окно безопасно — без ключа ничего не выложится. Витрину берём из
   // сохранённой копии каталога (state.products), сервер не нужен.
   // Плашка «не опубликовалось» ведёт туда, где вставляют ключ и жмут «Опубликовать»
-  $('publishBanner').addEventListener('click', () => openPublishSheet());
+  $('publishBanner').addEventListener('click', () => { if (ui.publishNeedsPassword || state.securityNeedsUpgrade) $('menuOwnerPass').click(); else openPublishSheet(); });
 
   function maybeOpenPublishByHash() { if (location.hash === '#publish' || location.hash === '#gh') openPublishSheet(); }
   window.addEventListener('hashchange', maybeOpenPublishByHash);
@@ -701,6 +709,7 @@ function bindEvents() {
             $('loginError').hidden = false;
             return;
           }
+          if (passwordProblem(password)) { $('loginError').textContent = passwordProblem(password); $('loginError').hidden = false; return; }
           applyServerless(password);
           $('loginPassword').value = ''; $('loginEmail').value = '';
           closeSheet('loginSheet');
@@ -708,7 +717,10 @@ function bindEvents() {
           openImportHub();
           return;
         }
-        $('loginError').textContent = 'Пароль не подошёл. Проверь пароль каталога или пароль сотрудника.';
+        $('loginError').textContent = err.message === 'SECURITY_UPGRADE_REQUIRED'
+          ? 'Владелец должен один раз обновить защиту каталога: войти и сменить пароли владельца и сотрудника.'
+          : err.code === 'NETWORK' ? 'Нет связи. Подключись к интернету и повтори вход.'
+            : 'Пароль не подошёл или данные каталога повреждены. Проверь пароль и повтори вход.';
         $('loginError').hidden = false;
         return;
       }
@@ -734,8 +746,9 @@ function bindEvents() {
     closeSheet('adminMenuSheet');
     if (state.serverless) {
       // серверлес: забываем пароль, запомненный вход и данные, перезагружаем витрину
-      ui.secretPw = null; clearSvAuth();
+      ui.secretPw = null; ghSetToken('');
       state.serverless = false; state.session = null; state.isAdmin = false; state.canPurchase = false; state.canSales = false; state.role = null;
+      await clearSvAuth();
       toast('Вы вышли из аккаунта');
       location.reload();
       return;
@@ -1093,25 +1106,10 @@ async function init() {
   // мгновенно показываем сохранённый каталог, затем тихо обновляем
   if (await loadCache()) renderAll();
 
-  // Запомненный вход без сервера (владелец/сотрудник): не выходим до явного
-  // «Выйти», даже после обновления страницы. Роль поднимаем сразу (данные —
-  // из кэша), а полный каталог (закупка/продажи) дотягиваем из GitHub в фоне.
-  let svRestored = false;
-  try {
-    const saved = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null');
-    if (saved && saved.pw) {
-      svRestored = true;
-      // Права поднимаем сразу по запомненной роли, но окончательное слово — за
-      // каталогом: владелец мог сменить пароль сотрудника, и тогда роль другая.
-      if (saved.role === 'staff') applyStaff(saved.pw); else applyServerless(saved.pw);
-      unlockAny(saved.pw).then((role) => {
-        if (role === 'staff') applyStaff(saved.pw); else applyServerless(saved.pw);
-        renderAll();
-        safely('проверка витрины', checkShowcaseFresh)();
-        safely('что нового', checkNews)();
-      }).catch(() => { /* нет связи или пароль сменили — останемся с кэшем */ });
-    }
-  } catch (e) { /* не вышло восстановить — вход по паролю остаётся доступен */ }
+  // Сначала проверяем ключ и актуальность доступа, затем поднимаем роль.
+  // Отозванный пароль не превращаем в «нет сети».
+  await restoreSession();
+  ui.persistPrivate = rememberSession;
 
   await safely('обновление каталога', refresh)();
   warmSearchIndex();   // указатель поиска соберётся в свободную минуту

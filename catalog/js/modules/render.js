@@ -240,7 +240,7 @@ export function renderGrid() {
   const cards = shown.map((p) => {
     const photo = (p.photos || []).find((u) => u && String(u).trim());
     const img = photo
-      ? `<img src="${esc(photo)}" alt="" loading="lazy" onerror="wmImgFail(this)">`
+      ? `<img src="${esc(photo)}" alt="" loading="lazy" data-photo-fallback>`
       : ic('box', 'ic-ph');
     const photoCls = photo ? 'card-photo' : 'card-photo no-photo';
     // минимализм: на плитке только код и, если весовой, значок — остальное в карточке
@@ -679,7 +679,7 @@ function renderMyFrequent() {
       const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
       const code = x.code ? `<span class="similar-code">${esc(x.code)}</span>` : '';
       return `<button class="similar-card" data-similar="${esc(x.id)}">
-        <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
+        <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" data-photo-fallback>` : ic('box', 'ic-ph')}</span>
         <span class="similar-name">${esc(x.name)}</span>${code}${price}</button>`;
     }).join('') + '</div>';
 }
@@ -698,7 +698,7 @@ export function renderNewProducts() {
       const ph = (x.photos || []).find((u) => u && String(u).trim());
       const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
       return `<button class="similar-card" data-similar="${esc(x.id)}">
-        <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
+        <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" data-photo-fallback>` : ic('box', 'ic-ph')}</span>
         <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
     }).join('') + '</div>';
 }

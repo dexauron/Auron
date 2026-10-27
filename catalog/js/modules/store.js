@@ -45,6 +45,18 @@ export async function idbSet(key, value) {
     tx.objectStore(IDB_STORE).put(value, key);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+  });
+}
+
+export async function idbDelete(key) {
+  const db = await openIdb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
   });
 }
 
@@ -86,10 +98,10 @@ export const state = {
   selGroups: [],    // выбранные группы: id групп + служебные 'none'/'weighted'
   selSuppliers: [], // выбранные поставщики (id); пусто = все поставщики
   session: null,
-  role: null,       // 'admin' | 'manager' | 'cashier' — определяется после входа
+  role: null,       // 'admin' | 'staff'; без входа — null
   isAdmin: false,   // admin: загрузка и правка каталога
   canPurchase: false, // видят закупочные цены и контакты
-  canSales: false,  // видят «Ходовые товары» (продажи/выручка) — только владелец
+  canSales: false,  // видят «Ходовые товары» (владелец и сотрудник-бухгалтер)
   serverless: false, // режим без сервера (каталог на GitHub)
   staffPassword: null, // пароль сотрудника (задаёт владелец; хранится в его каталоге)
   contacts: {},     // supplier_id → контакты (загружаются после входа)

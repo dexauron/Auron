@@ -223,7 +223,7 @@ export async function submitCompetitorPrice(e) {
     if (i >= 0) state.compPrices[i] = record; else (state.compPrices = state.compPrices || []).push(record);
     if (!ghConfigured()) throw new Error('нет ключа публикации — открой «Публикация на GitHub» в меню и вставь ключ');
     // Цены чужих магазинов едут в зашифрованный каталог, а не в открытый файл.
-    if (!ui.secretPw) throw new Error('сохранить цену магазина может владелец — у сотрудника нет доступа к публикации');
+    if (!state.isAdmin) throw new Error('сохранить цену магазина может владелец — у сотрудника нет доступа к публикации');
     await publishFull(ui.secretPw);
     closeSheet('competitorAddSheet');
     toast('Цена магазина сохранена');
