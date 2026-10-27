@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { chromium, runner } = require('./helpers');
+const { legacyCatalogFiles, legacyWholeFile } = require('./fixtures/legacy-crypto.cjs');
 
 const N = 400;                       // товаров в проверочном каталоге
 const products = Array.from({ length: N }, (_, i) => ({
@@ -293,15 +294,62 @@ const DP = (fs.readFileSync(path.join(__dirname, '..', 'js', 'config.js'), 'utf8
   });
   chk(blockedInline, 'CSP блокирует внедрённый inline-скрипт');
 
-  // ── 9. Старый цельный файл всё ещё читается ──
+  // ── 9. Реальный прежний v3: вход через форму и переход без потери данных ──
+  // Фикстура повторяет старый writer, а не новый encryptJSON/keyEncrypt:
+  // у частей нет v/alg, сжатие помечено именно строкой 'gzip'.
+  const oldSnapshot = { v: 1, products: products.slice(0, 4), prices: prices.slice(0, 4), sales: sales.slice(0, 4),
+    groups: [{ id: 'g1', name: 'Товары' }], suppliers: [{ id: 's1', name: 'Поставщик' }],
+    requests: [{ id: 'owner-request' }], contacts: {} };
+  const ghV3 = fakeGithub();
+  for (const [name, body] of await legacyCatalogFiles(oldSnapshot, 'legacy-owner-fixture', 'legacy-staff-fixture', { prefix: DP })) ghV3.fs.set(name, body);
+  const legacyCtx = await b.newContext({ viewport: { width: 390, height: 900 }, serviceWorkers: 'block' });
+  await legacyCtx.addInitScript(() => localStorage.setItem('wm_gh_token', 'tok'));
+  await ghV3.route(legacyCtx);
+  const oldPage = await legacyCtx.newPage();
+  oldPage.on('pageerror', (e) => errs.push(e.message));
+  await oldPage.goto('http://localhost:8123/');
+  await oldPage.waitForFunction(() => window.WM_PUBLISH);
+  await oldPage.click('#adminBtn');
+  await oldPage.fill('#loginPassword', 'legacy-staff-fixture');
+  await oldPage.click('#loginSubmit');
+  await oldPage.waitForFunction(() => !document.getElementById('loginError').hidden);
+  chk(await oldPage.evaluate(() => /Владелец должен/.test(document.getElementById('loginError').textContent)
+    && !window.WM_PUBLISH._state().session), 'старому сотруднику объяснён переход, права владельца не выданы');
+  await oldPage.fill('#loginPassword', 'legacy-owner-fixture');
+  await oldPage.click('#loginSubmit');
+  await oldPage.waitForFunction(() => window.WM_PUBLISH._state().isAdmin || !document.getElementById('loginError').hidden);
+  const oldOwnerEntered = await oldPage.evaluate(() => window.WM_PUBLISH._state().isAdmin);
+  chk(oldOwnerEntered, 'прежний пароль владельца открывает настоящий v3 gzip через форму входа');
+  if (oldOwnerEntered) {
+    const before = await oldPage.evaluate(() => {
+      const s = window.WM_PUBLISH._state();
+      return [s.products.length, s.suppliers.length, s.prices.length, s.products.reduce((n,p) => n + p.barcodes.length, 0), s.requests.length];
+    });
+    chk(JSON.stringify(before) === '[4,1,4,4,1]', 'после старого входа сохранены товары, поставщики, цены, штрихкоды и заявки');
+    await oldPage.click('#adminBtn');
+    await oldPage.click('#menuOwnerPass');
+    await oldPage.fill('#ownerPassNew', 'migrated-owner-fixture');
+    await oldPage.fill('#ownerPassAgain', 'migrated-owner-fixture');
+    await oldPage.fill('#ownerPassStaff', 'migrated-staff-fixture');
+    await oldPage.click('#ownerPassSubmit');
+    await oldPage.waitForFunction(() => document.getElementById('ownerPassSheet').hidden, { timeout: 30000 });
+    chk(JSON.parse(ghV3.fs.get(`${DP}/keys.json`)).v === 4, 'форма переводит настоящий v3 в раздельный v4');
+    const after = await oldPage.evaluate(async () => {
+      const P = window.WM_PUBLISH; await P.unlockSecret('migrated-owner-fixture');
+      const s = P._state();
+      const owner = [s.products.length, s.suppliers.length, s.prices.length, s.products.reduce((n,p) => n + p.barcodes.length, 0), s.requests.length];
+      await P.unlockStaff('migrated-staff-fixture');
+      return { owner, staff: [s.products.length, s.prices.length, s.requests.length] };
+    });
+    chk(JSON.stringify(after.owner) === JSON.stringify(before) && JSON.stringify(after.staff) === '[4,4,0]',
+      'оба новых пароля читают свои наборы без потерь и без заявок владельца у сотрудника');
+  }
+  await legacyCtx.close();
+
+  // ── 10. Старый цельный gzip-файл с прежним PBKDF2 всё ещё читается ──
   [`${DP}/keys.json`, `${DP}/catalog.enc`, `${DP}/staff-catalog.enc`].forEach((f) => gh.fs.delete(f));
-  const legacy = await page.evaluate(async () => {
-    const P = window.WM_PUBLISH;
-    const old = await P.encryptJSON({ v: 1, products: [{ id: 'x1', name: 'Старый товар' }], groups: [] }, 'oldpw');
-    window.__legacy = old;
-    return old.length > 0;
-  });
-  gh.fs.set(`${DP}/secret-catalog.enc`, await page.evaluate(() => window.__legacy));
+  const legacy = await legacyWholeFile({ v: 1, products: [{ id: 'x1', name: 'Старый товар' }], groups: [] }, 'oldpw');
+  gh.fs.set(`${DP}/secret-catalog.enc`, legacy);
   const readOld = await page.evaluate(async () => {
     const P = window.WM_PUBLISH, s = P._state();
     s.products = [];
