@@ -210,6 +210,22 @@ const DP = (fs.readFileSync(path.join(__dirname, '..', 'js', 'config.js'), 'utf8
   });
   chk(newOwner === N, `новый пароль владельца открывает каталог (${newOwner} товаров)`);
 
+  // Пароль из формы передаётся точно, включая намеренные крайние пробелы.
+  const spacedPassword = '  пароль-для-проверки-пробелов  ';
+  await page.evaluate(() => window.WM_PUBLISH.applyServerless(null));
+  await page.click('#adminBtn');
+  await page.click('#menuOwnerPass');
+  await page.fill('#ownerPassNew', spacedPassword);
+  await page.fill('#ownerPassAgain', spacedPassword);
+  await page.click('#ownerPassSubmit');
+  await page.waitForFunction(() => document.getElementById('ownerPassSheet').hidden, { timeout: 30000 });
+  const exactPassword = await page.evaluate(async (pw) => {
+    const P = window.WM_PUBLISH;
+    await P.unlockSecret(pw);
+    try { await P.unlockSecret(pw.trim()); return false; } catch (e) { return true; }
+  }, spacedPassword);
+  chk(exactPassword, 'форма сохраняет пароль без обрезания пробелов; обрезанный вариант не подходит');
+
   // ── 8. В открытом файле ключей нет ни пароля, ни данных ──
   const keysFile = gh.fs.get(`${DP}/keys.json`) || '';
   chk(!/owner-fixture-password|staff-fixture-password|другойпароль|новый-длинный-пароль/.test(keysFile) && keysFile.length < 2000,

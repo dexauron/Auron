@@ -15,6 +15,8 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
   const b = await chromium.launch();
   const { chk, done } = runner('ОФЛАЙН И ОБНОВЛЕНИЯ');
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+  await ctx.route('**/data/index.json*', (r) => r.fulfill({ status: 404, body: 'fixture: legacy products' }));
+  await ctx.route('**/data/p/*.json*', (r) => r.abort('blockedbyclient'));
   await ctx.route('**/auth/v1/**', (r) => r.fulfill({ status: 200, body: '{}' }));
   await ctx.route('**/rest/v1/**', (r) => r.fulfill(J([])));
   await ctx.route('**/data/products.json*', (r) => r.fulfill(J(products)));

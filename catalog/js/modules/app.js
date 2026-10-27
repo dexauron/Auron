@@ -532,9 +532,9 @@ function bindEvents() {
   });
   $('ownerPassForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const pw = $('ownerPassNew').value.trim();
-    const again = $('ownerPassAgain').value.trim();
-    const staffPw = $('ownerPassStaff').value.trim();
+    const pw = $('ownerPassNew').value;
+    const again = $('ownerPassAgain').value;
+    const staffPw = $('ownerPassStaff').value;
     const err = $('ownerPassError');
     const btn = $('ownerPassSubmit');
     err.hidden = true;
@@ -569,7 +569,7 @@ function bindEvents() {
 
   $('staffPassForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const pass = $('newStaffPass').value.trim();
+    const pass = $('newStaffPass').value;
     const btn = $('staffPassSubmit');
     $('staffPassError').hidden = true;
     // Серверлес: пароль сотрудника задаёт владелец. Сохраняем в его каталог и

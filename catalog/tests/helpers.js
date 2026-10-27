@@ -10,6 +10,10 @@ async function newPage(browser, data = {}) {
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 900 }, isMobile: true, hasTouch: true, serviceWorkers: 'block',
   });
+  // В CI рядом лежит настоящая витрина магазина. Если не подменить индекс,
+  // приложение прочитает её части и проигнорирует products.json с фикстурой.
+  await ctx.route('**/data/index.json*', (r) => r.fulfill({ status: 404, body: 'fixture: legacy products' }));
+  await ctx.route('**/data/p/*.json*', (r) => r.abort('blockedbyclient'));
   await ctx.addInitScript(() => localStorage.setItem('wm_gh_token', 'tok'));
   await ctx.route('**/auth/v1/**', (r) => r.fulfill({ status: 200, body: '{}' }));
   await ctx.route('**/rest/v1/**', (r) => r.fulfill(J([])));
