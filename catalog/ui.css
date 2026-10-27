@@ -92,9 +92,9 @@ mark { background: color-mix(in srgb, var(--accent) 17%, transparent); }
 .card-photo.no-photo .ic { width: 28px; height: 28px; opacity: .4; }
 .card-price { font-size: 21px; font-weight: 750; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
 .card-code { min-height: 40px; max-width: 100%; overflow-wrap: anywhere; white-space: normal; padding: 7px 10px; border-radius: 11px; font-weight: 700; }
-.grid.list .card-row { min-height: 78px; padding: 14px; gap: 14px; margin-bottom: 9px; }
-.grid.list .card-name { font-size: 15px; line-height: 1.4; margin-bottom: 6px; }
-.grid.list .card-price { font-size: 15px; }
+.grid.list .card-row { min-height: 60px; padding: 8px 12px; gap: 12px; margin-bottom: 6px; }
+.grid.list .card-name { font-size: 15px; line-height: 1.4; margin-bottom: 2px; }
+.grid.list .card-price { font-size: 14px; padding-top: 0; }
 .grid.list .card-code { min-height: 44px; max-width: 44%; justify-content: center; font-size: 21px; padding: 8px 11px; }
 .grid.compact .card-code { min-height: 36px; }
 .tag { line-height: 1.35; border-radius: 7px; }
@@ -183,7 +183,7 @@ td, th { line-height: 1.45; }
   .brand-name { font-size: 16px; }
   .sheet-body { --sheet-px: 16px; }
   .sheet-title { font-size: 21px; }
-  .grid.list .card-row { padding: 12px; gap: 10px; }
+  .grid.list .card-row { padding: 8px 12px; gap: 10px; }
   .grid.list .card-code { font-size: 18px; padding-inline: 8px; }
   .ios-row { padding-inline: 13px; }
   .tabbar .tab .tab-txt { font-size: 10.5px; }
