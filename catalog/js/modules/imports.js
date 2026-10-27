@@ -60,7 +60,8 @@ function svIndex() {
   for (const p of state.products) {
     if (p.code) byCode.set(normCode(p.code), p);
     for (const b of (p.barcodes || [])) byBc.set(String(b), p);
-    byName.set(norm(p.name), p);
+    const normalizedName = norm(p.name);
+    byName.set(normalizedName, byName.has(normalizedName) ? null : p);
     const k = nameKey(p.name);
     // ключ, который подходит сразу двум товарам, ничего не доказывает —
     // такой не используем вовсе, чтобы не привязать штрихкод не туда
@@ -69,11 +70,14 @@ function svIndex() {
   return { byCode, byBc, byName, byKey };
 }
 function svMatch(idx, code, barcodes, name) {
-  if (code && idx.byCode.has(normCode(code))) return idx.byCode.get(normCode(code));
-  for (const b of (barcodes || [])) if (idx.byBc.has(String(b))) return idx.byBc.get(String(b));
-  if (name && idx.byName.has(norm(name))) return idx.byName.get(norm(name));
-  // последняя попытка: те же слова в другом порядке / «200гр» против «200г»
-  if (name) { const k = nameKey(name); if (k && idx.byKey.get(k)) return idx.byKey.get(k); }
+  const normalizedCode = code ? normCode(code) : '';
+  if (normalizedCode && idx.byCode.has(normalizedCode)) return idx.byCode.get(normalizedCode);
+  // Новый код не склеиваем с другим кодом из-за одинакового названия/штрихкода.
+  const compatible = (p) => p && (!normalizedCode || !p.code || normCode(p.code) === normalizedCode);
+  for (const b of (barcodes || [])) { const p = idx.byBc.get(String(b)); if (compatible(p)) return p; }
+  const byName = name && idx.byName.get(norm(name));
+  if (compatible(byName)) return byName;
+  if (name) { const k = nameKey(name), p = k && idx.byKey.get(k); if (compatible(p)) return p; }
   return null;
 }
 /* Поставщик и группа по названию — через указатель, а не перебором.
@@ -215,6 +219,7 @@ export async function checkShowcaseFresh() {
   if (!state.isAdmin || !CFG.STATIC_URL) return;
   const el = $('publishBanner');
   if (!el || !el.hidden) return;          // уже висит беда посрочнее
+  if (state.securityNeedsUpgrade) { el.textContent = 'Обнови защиту каталога: задай разные длинные пароли владельца и сотрудника и опубликуй каталог. Закрытые файлы получат отдельные ключи.'; el.hidden = false; return; }
   let meta = null;
   try {
     const r = await fetch(`${CFG.STATIC_URL}index.json?t=${Date.now()}`, { cache: 'no-cache' });
@@ -222,7 +227,7 @@ export async function checkShowcaseFresh() {
   } catch (e) { return; }                 // нет связи — зря не пугаем
   if (!meta || Number(meta.app) >= SHOWCASE_V) return;
   el.textContent = 'Витрина на сайте собрана старой версией приложения: '
-    + 'покупатели не видят штрихкоды и наличие. Нажми, чтобы опубликовать заново.';
+    + 'нужно опубликовать заново, чтобы обновить состав данных витрины.';
   el.hidden = false;
 }
 
@@ -232,17 +237,18 @@ export async function checkShowcaseFresh() {
 function showPublishTrouble(err) {
   const el = $('publishBanner');
   if (!el) return;
-  if (!err) { el.hidden = true; return; }
-  logError('публикация', err.tech || err);   // подробности — в журнал, не человеку
+  if (!err) { el.hidden = true; ui.publishNeedsPassword = false; return; }
+  logError('публикация', err.tech || err);
   const why = err.friendly || 'Не получилось опубликовать.';
+  ui.publishNeedsPassword = err.code === 'password' || state.securityNeedsUpgrade;
   const fix = err.code === 'token' ? ' Нажми, чтобы вставить новый ключ.'
-    : err.code === 'wait' ? ' Нажми, чтобы попробовать ещё раз.'
+    : err.code === 'password' ? ' Открой меню → «Пароль каталога» и задай новые пароли.'
+      : err.code === 'wait' ? ' Нажми, чтобы попробовать ещё раз.'
       : ' Нажми, чтобы открыть настройки публикации.';
   el.textContent = 'Сохранено на телефоне, но не опубликовано. ' + why + fix;
   el.hidden = false;
   toast('Сохранено на телефоне — опубликовать не вышло');
 }
-
 // После правки в памяти — пересобрать индекс, перерисовать и опубликовать на GitHub.
 export async function svSaveAndPublish(okMsg) {
   state.products.sort((a, b) => cmpRu(a.name, b.name));
@@ -267,7 +273,7 @@ function svUploadBarcodes(parsed) {
   const idx = svIndex();
   let added = 0; let matched = 0; const missing = new Set();
   for (const rec of parsed.recs) {
-    const p = svMatch(idx, rec.code, [rec.barcode], rec.name);
+    const p = rec.code ? idx.byCode.get(normCode(rec.code)) : svMatch(idx, null, [rec.barcode], rec.name);
     if (!p) { missing.add(rec.name); continue; }
     p.barcodes = p.barcodes || [];
     matched++;
@@ -514,10 +520,11 @@ function detectColumns(rows) {
     const next = (rows[r + 1] || []).map((v) => cellStr(v).toLowerCase());
     if (!labels.some((l) => l.includes('номенклатура') || l.includes('наименование'))) continue;
 
+    const hasSubheader = next.some((l) => /^номенклатура\./.test(l.trim()));
     const cols = {};
-    const width = Math.max(labels.length, next.length);
+    const width = hasSubheader ? Math.max(labels.length, next.length) : labels.length;
     for (let c = 0; c < width; c++) {
-      const l = (labels[c] || '') + ' ' + (next[c] || '');
+      const l = (labels[c] || '') + (hasSubheader ? ' ' + (next[c] || '') : '');
       if (!l.trim()) continue;
       if (l.includes('артикул')) cols.article ??= c;
       // описание товара: если в отчёте 1С такая колонка есть, она уедет
@@ -541,7 +548,6 @@ function detectColumns(rows) {
     }
     if (cols.name === undefined) continue;
     // если следующая строка — подзаголовки («Номенклатура.Код»), данные начинаются через одну
-    const hasSubheader = next.some((l) => l.includes('номенклатура.'));
     return { cols, dataStart: r + (hasSubheader ? 2 : 1) };
   }
   return null;
@@ -644,7 +650,7 @@ function mergeBarcodesReport(rows, byKey) {
   if (!det) throw new Error('Не нашёл строку заголовков в файле 2');
   const { cols, dataStart } = det;
   const byName = new Map();
-  for (const item of byKey.values()) byName.set(norm(item.name), item);
+  for (const item of byKey.values()) { const n = norm(item.name); byName.set(n, byName.has(n) ? null : item); }
   let added = 0;
   for (let r = dataStart; r < rows.length; r++) {
     const row = rows[r];
@@ -652,7 +658,7 @@ function mergeBarcodesReport(rows, byKey) {
     if (!bc) continue;
     const code = cols.code !== undefined ? normCode(row[cols.code]) : '';
     const name = cellStr(row[cols.name]);
-    const item = (code && byKey.get(code)) || byName.get(norm(name));
+    const item = code ? byKey.get(code) : byName.get(norm(name));
     if (item && !item.barcodes.has(bc)) { item.barcodes.add(bc); added++; }
   }
   return added;

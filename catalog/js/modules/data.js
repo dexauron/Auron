@@ -1,8 +1,9 @@
 // Загрузка каталога
 
-import { CACHE_KEY, idbGet, idbSet, state } from './store.js';
+import { CACHE_KEY, idbGet, idbSet, state, ui } from './store.js';
 import { cmpRu, cmpStr } from './core.js';
 import { buildIndex } from './catalog.js';
+import { publicProducts, publicGroups } from './publication-data.js';
 
 /* ── Данные ───────────────────────────────────── */
 
@@ -10,9 +11,9 @@ export async function loadCache() {
   try {
     const c = await idbGet(CACHE_KEY);
     if (c && Array.isArray(c.products)) {
-      state.groups = c.groups || [];
-      state.suppliers = c.suppliers || [];
-      state.products = c.products;
+      state.groups = publicGroups(c.groups || []);
+      state.suppliers = [];
+      state.products = publicProducts(c.products);
       state.syncMax = c.syncMax || '';
       state.showcaseAt = c.showcaseAt || '';
       buildIndex();
@@ -37,14 +38,11 @@ export function saveCache() {
 }
 
 function writeCache() {
+  if (state.session && ui.persistPrivate) ui.persistPrivate();
   // служебные поля индекса (начинаются с "_") в кэш не пишем — экономим место
-  const clean = state.products.map((p) => {
-    const o = {};
-    for (const k in p) if (k[0] !== '_') o[k] = p[k];
-    return o;
-  });
+  const clean = publicProducts(state.products);
   idbSet(CACHE_KEY, {
-    groups: state.groups, suppliers: state.suppliers,
+    groups: publicGroups(state.groups), suppliers: [],
     products: clean, ts: Date.now(), syncMax: state.syncMax,
     showcaseAt: state.showcaseAt || '',
   }).catch(() => { /* не сохранилось — не страшно, кэш вспомогательный */ });

@@ -31,7 +31,7 @@ async function newPage(browser, data = {}) {
 // войти владельцем (бесплатный режим) и подложить внутренние данные
 async function asOwner(page, d = {}) {
   await page.evaluate((x) => {
-    const P = window.WM_PUBLISH; P.ghSetToken('tok'); P.applyServerless('pw');
+    const P = window.WM_PUBLISH; P.ghSetToken('tok'); P.applyServerless('fixture-owner-password');
     const s = P._state();
     if (x.prices) s.prices = x.prices;
     if (x.sales) s.sales = x.sales;
