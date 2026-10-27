@@ -816,6 +816,10 @@ export function choosePick(kind) {
 
 // «Недавно смотрели» — горизонтальная лента на главной, когда нет поиска и фильтров
 
+function themeChrome() {
+  const bg = window.getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.content = bg;
+}
 export function applyTheme(t) {
   // t: 'dark' | 'light' | null (авто — по системе)
   const root = document.documentElement;
@@ -823,8 +827,14 @@ export function applyTheme(t) {
   else root.removeAttribute('data-theme');
   const icon = $('themeIcon');
   if (icon) icon.innerHTML = ic(t === 'dark' ? 'sun' : t === 'light' ? 'moon' : 'auto');
+  themeChrome();
 }
-export function initTheme() { try { applyTheme(localStorage.getItem(THEME_KEY)); } catch (e) { /* */ } }
+export function initTheme() {
+  try { applyTheme(localStorage.getItem(THEME_KEY)); } catch (e) { /* */ }
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (!document.documentElement.hasAttribute('data-theme')) themeChrome();
+  });
+}
 export function toggleTheme() {
   let cur; try { cur = localStorage.getItem(THEME_KEY); } catch (e) { cur = null; }
   // цикл: авто → тёмная → светлая → авто

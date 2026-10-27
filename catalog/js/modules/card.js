@@ -850,7 +850,7 @@ export async function copyText(text, okMsg) {
 function fieldRow(key, val, main = false, copy = false) {
   const cls = main ? ' field-main' : '';
   const copyBtn = (copy || main)
-    ? `<button class="copy-btn" data-copy="${esc(val)}">⧉</button>`
+    ? `<button class="copy-btn" data-copy="${esc(val)}" aria-label="Скопировать поле ${esc(key)}">${ic('copy')}</button>`
     : '';
   return `<div class="field-row${cls}"><span class="field-key">${esc(key)}</span><span class="field-val">${esc(val)}</span>${copyBtn}</div>`;
 }

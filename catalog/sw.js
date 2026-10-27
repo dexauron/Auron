@@ -1,7 +1,7 @@
 /* Каталог товаров — service worker.
  * Стратегия «сначала сеть»: онлайн всегда свежая версия (версии кэша бампать
  * не нужно), офлайн — последняя сохранённая копия приложения. */
-const CACHE = 'wm-catalog-v138';
+const CACHE = 'wm-catalog-v139';
 // Отдельный «вечный» кэш для фото товаров: заполняется по мере просмотра,
 // НЕ очищается при обновлении приложения — фото грузятся один раз и потом
 // показываются мгновенно, работают офлайн и не тратят трафик.
@@ -16,7 +16,7 @@ const DATA = 'wm-data-v1';
  * заходе КАЖДОМУ сотруднику — на мобильном интернете это лишние полминуты
  * ожидания у человека, который просто хотел посмотреть цену. Теперь он
  * сохраняется в офлайн-копию при первом настоящем использовании (см. fetch). */
-const SHELL = ['./', 'index.html', 'styles.css', 'js/modules/app.js', 'js/modules/catalog-crypto.js', 'js/modules/publication-data.js',
+const SHELL = ['./', 'index.html', 'styles.css', 'ui.css', 'js/modules/app.js', 'js/modules/catalog-crypto.js', 'js/modules/publication-data.js',
   'js/modules/store.js', 'js/modules/core.js', 'js/modules/icons.js', 'js/modules/catalog.js', 'js/modules/render.js', 'js/modules/device.js', 'js/modules/card.js', 'js/modules/data.js', 'js/modules/brand.js', 'js/modules/parts.js', 'js/modules/publish.js', 'js/modules/competitors.js', 'js/modules/photos.js', 'js/modules/admin.js', 'js/modules/imports.js', 'js/modules/scanner.js', 'js/modules/orders.js', 'js/modules/compare.js', 'js/modules/restock.js', 'js/modules/work.js', 'js/modules/guest.js', 'js/modules/shopping.js', 'js/modules/news.js', 'js/modules/mascot.js', 'js/modules/margin.js', 'js/modules/reviews.js', 'js/modules/whatsapp.js', 'js/modules/pricerise.js', 'js/modules/onec.js', 'js/modules/requests.js', 'js/xlsx-worker.js', 'js/config.js',
   'manifest.webmanifest',
   /* Картинки магазина — логотип и талисман — здесь НЕ перечислены нарочно:
