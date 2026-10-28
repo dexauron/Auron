@@ -505,6 +505,7 @@ export function renderAll() {
   renderPickLists();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
+  window.dispatchEvent(new Event('wm:ready'));
 }
 
 // включён ли хоть один настоящий фильтр — поиск словом за фильтр не считаем
@@ -831,9 +832,12 @@ export function applyTheme(t) {
 }
 export function initTheme() {
   try { applyTheme(localStorage.getItem(THEME_KEY)); } catch (e) { /* */ }
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+  const onChange = () => {
     if (!document.documentElement.hasAttribute('data-theme')) themeChrome();
-  });
+  };
+  if (typeof media.addEventListener === 'function') media.addEventListener('change', onChange);
+  else if (typeof media.addListener === 'function') media.addListener(onChange);
 }
 export function toggleTheme() {
   let cur; try { cur = localStorage.getItem(THEME_KEY); } catch (e) { cur = null; }

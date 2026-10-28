@@ -6,6 +6,7 @@ const STAFF_PRODUCT = [...PUBLIC_TEXT, 'article', 'department', 'note', 'created
 const STAFF_ARRAYS = ['groups', 'suppliers', 'prices', 'sales', 'competitors', 'compPrices', 'orders'];
 const STAFF_MAPS = ['contacts', 'unitCoef', 'retailHist', 'orderRules'];
 const cloneData = (x) => JSON.parse(JSON.stringify(x));
+const publicNameOrder = new Intl.Collator('ru').compare;
 function textValue(x) { return typeof x === 'string' ? x : (typeof x === 'number' && Number.isSafeInteger(x) ? String(x) : null); }
 function photoLink(value) {
   const s = typeof value === 'string' ? value : (value && typeof value.url === 'string' ? value.url : '');
@@ -33,7 +34,7 @@ export function publicProducts(products) {
     if (reviews.length) o.reviews = reviews;
     const st = availability(p, null); if (st) o.stock_state = st;
     return o;
-  }).sort((a,b) => String(a.name).localeCompare(String(b.name), 'ru'));
+  }).sort((a,b) => publicNameOrder(String(a.name), String(b.name)));
 }
 export function publicGroups(groups) {
   return groups.map((g) => ({ id: textValue(g.id), name: typeof g.name === 'string' ? g.name : '', sort_order: Number.isFinite(g.sort_order) ? g.sort_order : 0 }));
