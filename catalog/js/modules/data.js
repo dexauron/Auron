@@ -8,12 +8,17 @@ import { publicProducts, publicGroups } from './publication-data.js';
 /* ── Данные ───────────────────────────────────── */
 
 export async function loadCache() {
+  const session = state.session, generation = state.dataGen;
   try {
     const c = await idbGet(CACHE_KEY);
     if (c && Array.isArray(c.products)) {
+      const products = await cacheProducts(c.products);
+      // Пока телефон обрабатывал копию, пользователь мог войти или загрузить
+      // новые данные. Публичный кэш не должен перезаписывать такой каталог.
+      if (session !== state.session || generation !== state.dataGen) return false;
       state.groups = publicGroups(c.groups || []);
       state.suppliers = [];
-      state.products = publicProducts(c.products);
+      state.products = products;
       state.syncMax = c.syncMax || '';
       state.showcaseAt = c.showcaseAt || '';
       buildIndex();
@@ -28,23 +33,39 @@ export async function loadCache() {
  * мегабайт: на бюджетном Android почти секунда, в которую приложение не
  * отвечает на нажатия. Кэш вспомогательный, спешить некуда — пишем в свободную
  * минуту и один раз на серию вызовов (при загрузке фото их бывает много). */
-let savePlanned = false;
+let savePlanned = false, saveAgain = false;
 export function saveCache() {
-  if (savePlanned) return;
+  if (savePlanned) { saveAgain = true; return; }
   savePlanned = true;
-  const run = () => { savePlanned = false; writeCache(); };
+  const run = async () => {
+    saveAgain = false;
+    try { await writeCache(); } catch (e) { /* вспомогательная копия недоступна */ }
+    finally { savePlanned = false; if (saveAgain) saveCache(); }
+  };
   if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 5000 });
   else setTimeout(run, 400);
 }
 
-function writeCache() {
-  if (state.session && ui.persistPrivate) ui.persistPrivate();
+async function cacheProducts(list) {
+  const clean = [];
+  // На опубликованных 19 672 товарах одна синхронная очистка занимала до
+  // полусекунды при CPU×6. Паузы между порциями оставляют время на касания.
+  for (let i = 0; i < list.length; i += 250) {
+    const rows = publicProducts(list.slice(i, i + 250));
+    for (const row of rows) clean.push(row);
+    if (i + 250 < list.length) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return sortByName(clean);
+}
+
+async function writeCache() {
+  if (state.session && ui.persistPrivate) await ui.persistPrivate();
   // служебные поля индекса (начинаются с "_") в кэш не пишем — экономим место
-  const clean = publicProducts(state.products);
-  idbSet(CACHE_KEY, {
-    groups: publicGroups(state.groups), suppliers: [],
-    products: clean, ts: Date.now(), syncMax: state.syncMax,
-    showcaseAt: state.showcaseAt || '',
+  const products = state.products.slice(), groups = publicGroups(state.groups);
+  const syncMax = state.syncMax, showcaseAt = state.showcaseAt || '';
+  const clean = await cacheProducts(products);
+  await idbSet(CACHE_KEY, {
+    groups, suppliers: [], products: clean, ts: Date.now(), syncMax, showcaseAt,
   }).catch(() => { /* не сохранилось — не страшно, кэш вспомогательный */ });
 }
 

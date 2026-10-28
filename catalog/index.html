@@ -67,6 +67,10 @@
   </header>
 
   <!-- Плашки состояния -->
+  <div class="banner banner-warn" id="startupNotice" role="status" aria-live="polite" hidden>
+    <p id="startupMessage"></p>
+    <button class="btn btn-secondary" id="startupReload" type="button">Обновить приложение</button>
+  </div>
   <div class="banner banner-warn" id="setupBanner" hidden>
     Каталог ещё не настроен: в <code>js/config.js</code> не указано, откуда брать витрину.
   </div>
@@ -1197,6 +1201,7 @@
 
   <!-- Библиотека базы лежит рядом (не с чужого CDN) — быстрее старт и работает офлайн -->
   <script src="js/config.js"></script>
+  <script src="js/boot.js"></script>
   <script type="module" src="js/modules/app.js"></script>
 </body>
 </html>

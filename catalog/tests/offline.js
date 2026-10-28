@@ -82,7 +82,8 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
     'когда новая версия взяла управление, страница один раз перезагружается сама');
   chk(/busyNow\(\)/.test(app) && /pendingReload/.test(app),
     'но не под руками: если человек печатает или открыл окно, обновление ждёт');
-  chk(/visibilitychange/.test(app) && /reg\.update\(\)/.test(app),
+  const boot = fs.readFileSync(path.join(__dirname, '..', 'js', 'boot.js'), 'utf8');
+  chk(/visibilitychange/.test(boot) && /reg\.update\(\)/.test(boot),
     'обновление проверяется при каждом возврате к приложению');
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);

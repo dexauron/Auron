@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'">
+  <title>Восстановить каталог</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body data-recovery>
+  <main class="content">
+    <h1 class="sheet-title">Восстановить каталог</h1>
+    <div class="banner banner-info" id="startupNotice" role="status" aria-live="polite">
+      <p id="startupMessage">Загрузим приложение заново. Товары, сохранённый вход и настройки публикации останутся на устройстве. Для обновления нужен интернет.</p>
+      <button class="btn btn-primary" id="startupReload" type="button">Обновить приложение</button>
+    </div>
+    <p class="ios-note"><a href="./">Вернуться в каталог</a></p>
+  </main>
+  <script src="js/boot.js"></script>
+</body>
+</html>
