@@ -12,7 +12,8 @@ const src = Object.fromEntries(files.map((f) => [f, fs.readFileSync(path.join(di
 // Обычные скрипты из HTML тоже управляют экраном (ранний запуск не зависит
 // от модулей). Берём список из разметки, чтобы не пропустить следующий такой файл.
 for (const m of html.matchAll(/<script[^>]*\bsrc="(js\/[^\"]+)"/g)) {
-  if (!m[1].startsWith('js/modules/')) src[m[1]] = fs.readFileSync(path.join(root, m[1]), 'utf8');
+  const file = m[1].split(/[?#]/)[0];
+  if (!file.startsWith('js/modules/')) src[file] = fs.readFileSync(path.join(root, file), 'utf8');
 }
 const all = Object.values(src).join('\n');
 

@@ -4,6 +4,13 @@
   'use strict';
   let started = false, ready = false, reloading = false;
   const recovery = document.body.hasAttribute('data-recovery');
+  // Прежний загрузчик после восстановления возвращался на recover.html.
+  // Его метка означает, что код уже обновлён: открываем свежий главный экран.
+  const reloadTag = new URLSearchParams(location.search).get('wm-reload');
+  if (recovery && reloadTag) {
+    const next = new URL('./', location.href); next.searchParams.set('wm-reload', reloadTag);
+    location.replace(next.href); return;
+  }
   const notice = document.getElementById('startupNotice');
   const message = document.getElementById('startupMessage');
   const button = document.getElementById('startupReload');
@@ -43,6 +50,7 @@
         await Promise.all(keys.filter((key) => key.startsWith('wm-catalog-v')).map((key) => caches.delete(key)));
       }
       const url = new URL(location.href);
+      if (recovery) { url.pathname = new URL('./', location.href).pathname; url.search = ''; url.hash = ''; }
       url.searchParams.set('wm-reload', String(Date.now()));
       location.replace(url.href);
     } catch (e) {

@@ -18,7 +18,7 @@ function harness() {
   const ctx = { state, ui: { secretPw: 'fixture-owner-password' },
     CFG: { DATA_PATH: 'data', STATIC_URL: 'data/', GITHUB_OWNER: 'fixture', GITHUB_REPO: 'fixture' },
     crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, btoa, atob, URL, Blob, Response,
-    CompressionStream, DecompressionStream, setTimeout, clearTimeout, networkDown: false,
+    CompressionStream, DecompressionStream, AbortController, setTimeout, clearTimeout, networkDown: false,
     console, structuredClone, requestIdleCallback: () => {},
     $: () => ({ hidden: false, classList: { toggle() {} } }),
     localStorage: { getItem: k => local.get(k) || null, setItem: (k,v) => local.set(k,v), removeItem: k => local.delete(k) },
@@ -111,6 +111,37 @@ function harness() {
   h.state.isAdmin=false; h.state.session=null;
   check(await h.api.restoreSession() && h.state.isAdmin===true, 'вход владельца восстанавливается после проверки ключа');
   await h.api.rememberSession();
+  for (const failure of ['missing-manifest', 'invalid-manifest', 'missing-part']) {
+    const file = failure === 'missing-part' ? 'data/sec/products-00.enc' : 'data/catalog.enc';
+    const original = h.files.get(file);
+    if (failure === 'invalid-manifest') h.files.set(file, '{fixture interrupted'); else h.files.delete(file);
+    h.state.isAdmin=false; h.state.session=null;
+    check(await h.api.restoreSession() && h.local.has('wm_sv_auth') && h.state.products[0].code==='001' && h.state.sessionWarning,
+      failure+': ошибка данных при подтверждённом ключе сохраняет вход и свою зашифрованную копию');
+    let blocked=false;try{await h.api.publishFull(null)}catch(e){blocked=/сохранённая копия/.test(e.message)}
+    check(blocked, failure+': сохранённая копия не перезаписывает непроверенный каталог сервера');
+    h.files.set(file,original);
+    await h.api.unlockSecret('fixture-owner-password');h.api.applyServerless(null);await h.api.rememberSession();
+  }
+  const normalFetch=h.ctx.fetch,normalTimer=h.ctx.setTimeout;
+  h.ctx.setTimeout=(fn,ms)=>setTimeout(fn,ms===12000?15:ms);
+  h.ctx.fetch=(_url,opts)=>new Promise((_resolve,reject)=>opts.signal.addEventListener('abort',()=>reject(new Error('fixture timeout'))));
+  h.state.isAdmin=false;h.state.session=null;
+  check(await h.api.restoreSession() && h.state.isAdmin, 'зависший ответ прерывается по сроку и открывается своя сохранённая копия');
+  h.ctx.fetch=normalFetch;h.ctx.setTimeout=normalTimer;
+  await h.api.unlockSecret('fixture-owner-password');h.api.applyServerless(null);await h.api.rememberSession();
+  const normalGet=h.ctx.idbGet;
+  h.ctx.idbGet=async()=>{throw new Error('fixture storage busy')};h.state.isAdmin=false;h.state.session=null;
+  check(await h.api.restoreSession()===false && h.local.has('wm_sv_auth') && h.disk.has('wm_auth_device_v2'), 'временная ошибка памяти устройства не удаляет сохранённый вход');
+  h.ctx.idbGet=normalGet;
+  check(await h.api.restoreSession() && h.state.isAdmin, 'после восстановления памяти вход возвращается без повторного ввода пароля');
+  for(const body of [null,'{fixture interrupted keys']) {
+    const original=h.files.get('data/keys.json');
+    body===null?h.files.delete('data/keys.json'):h.files.set('data/keys.json',body);
+    h.state.isAdmin=false;h.state.session=null;
+    check(await h.api.restoreSession()===false && !h.state.isAdmin && h.local.has('wm_sv_auth') && h.disk.has('wm_auth_device_v2'), 'неподтверждённые данные ключей не дают права и не уничтожают прежний ключ устройства');
+    h.files.set('data/keys.json',original);await h.api.restoreSession();
+  }
   h.state.staffPassword='fixture-owner-password';
   let samePassword=false;
   try { await h.api.publishFull(null); } catch(e) { samePassword=/должны отличаться/.test(e.message); }
