@@ -762,7 +762,6 @@ function bindEvents() {
     }
   });
 
-  $('fabAdd').addEventListener('click', () => openForm(null));
   $('menuAddProduct').addEventListener('click', () => { closeSheet('adminMenuSheet'); openForm(null); });
   $('btnEditProduct').addEventListener('click', () => { closeSheet('productSheet'); openForm(ui.currentProduct); });
   $('btnDeleteProduct').addEventListener('click', deleteProduct);
