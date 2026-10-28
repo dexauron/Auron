@@ -43,6 +43,7 @@
         await Promise.all(keys.filter((key) => key.startsWith('wm-catalog-v')).map((key) => caches.delete(key)));
       }
       const url = new URL(location.href);
+      if (recovery) { url.pathname = new URL('./', location.href).pathname; url.search = ''; url.hash = ''; }
       url.searchParams.set('wm-reload', String(Date.now()));
       location.replace(url.href);
     } catch (e) {

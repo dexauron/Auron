@@ -32,14 +32,9 @@ export function normCode(v) {
   return /^\d{1,3}(,\d{3})+$/.test(str) ? str.replace(/,/g, '') : str;
 }
 
-/* Ключ названия: те же слова в любом порядке и с единой записью единиц.
- * В справочниках 1С одно и то же пишут по-разному: «Сметана Чабан 25% стакан
- * 200гр» против «Чабан Сметана 25% стакан 200г». Из-за этого штрихкоды таких
- * товаров не привязывались. Сравниваем НАБОР слов: он либо совпадает целиком,
- * либо нет. «Трусики 44шт» и «Трусики 38шт» так не склеятся — числа остаются
- * частью слова, а это разные товары.
- * Про кириллицу и границу слова: в JS «г\b» не срабатывает после русской буквы,
- * поэтому пишем «(?![а-яё])» — на этом уже спотыкались и в поиске, и в разборе. */
+/* Ключ названия — набор слов с нормализованными единицами. Числа сохраняются:
+ * 44шт и 38шт — разные товары. После кириллицы используем (?![а-яё]),
+ * поскольку граница \b в JavaScript кириллицу не учитывает. */
 const UNIT_FIX = [
   [/(\d+)\s*(?:грамм|гр|г)(?![а-яё])/g, '$1г'],
   [/(\d+)\s*(?:килограмм|кг)(?![а-яё])/g, '$1кг'],
@@ -56,8 +51,9 @@ function nameKey(name) {
 }
 
 function svIndex() {
-  const byCode = new Map(), byBc = new Map(), byName = new Map(), byKey = new Map();
+  const byCode = new Map(), byBc = new Map(), byName = new Map(), byKey = new Map(), byArticle = new Map();
   for (const p of state.products) {
+    if (p.article) { const a = norm(p.article); byArticle.set(a, byArticle.has(a) ? null : p); }
     if (p.code) byCode.set(normCode(p.code), p);
     for (const b of (p.barcodes || [])) byBc.set(String(b), p);
     const normalizedName = norm(p.name);
@@ -67,7 +63,7 @@ function svIndex() {
     // такой не используем вовсе, чтобы не привязать штрихкод не туда
     if (k) byKey.set(k, byKey.has(k) ? null : p);
   }
-  return { byCode, byBc, byName, byKey };
+  return { byCode, byBc, byName, byKey, byArticle };
 }
 function svMatch(idx, code, barcodes, name) {
   const normalizedCode = code ? normCode(code) : '';
@@ -80,12 +76,8 @@ function svMatch(idx, code, barcodes, name) {
   if (name) { const k = nameKey(name), p = k && idx.byKey.get(k); if (compatible(p)) return p; }
   return null;
 }
-/* Поставщик и группа по названию — через указатель, а не перебором.
- * Раньше на КАЖДУЮ строку прайса перебирался весь список поставщиков, и
- * название каждого приводилось к общему виду заново. На настоящем файле
- * (12 000 строк, 668 поставщиков) это семь миллионов лишних приведений —
- * восемьдесят процентов всего времени выгрузки. Указатель строится один раз и
- * дополняется, когда появляется новое имя. */
+/* Поставщиков и группы индексируем один раз на список, дополняя новыми
+ * именами: полный перебор на каждую строку блокировал большой импорт. */
 function lookupIdx(cache, list) {
   if (cache.src !== list || cache.n !== list.length) {
     cache.src = list; cache.n = list.length;
@@ -121,7 +113,10 @@ function svSupplierId(name) {
 }
 function svNewProduct(idx, name) {
   const p = { id: svUuid(), name, group_id: null, supplier_ids: [], barcodes: [], photos: [], is_weighted: false, unit: null, retail_price: null };
-  state.products.push(p); idx.byName.set(norm(name), p);
+  state.products.push(p);
+  const n = norm(name), k = nameKey(name);
+  idx.byName.set(n, idx.byName.has(n) ? null : p);
+  if (k) idx.byKey.set(k, idx.byKey.has(k) ? null : p);
   return p;
 }
 function svAddBarcodes(idx, p, barcodes) {
@@ -160,14 +155,23 @@ function svUploadPrices(byKey) {
   }
 }
 function svUploadRetail(parsed) {
-  const idx = svIndex();
+  const idx = svIndex(), unresolved = new Set(); let matched = 0;
   for (const rec of parsed.recs) {
-    let p = svMatch(idx, null, [], rec.name);
-    if (!p && rec.article) p = state.products.find((x) => x.article && norm(x.article) === norm(rec.article)) || null;
-    if (!p) { p = svNewProduct(idx, rec.name); if (rec.article) p.article = rec.article; }
+    let p = svMatch(idx, rec.code, [], rec.name);
+    if (!p && rec.article) {
+      const candidate = idx.byArticle.get(norm(rec.article));
+      if (candidate && (!rec.code || !candidate.code || normCode(candidate.code) === rec.code)) p = candidate;
+    }
+    // Совпадение названия с несколькими кодами не определяет товар. Не
+    // создаём третью пустую карточку при каждом повторном импорте прайса.
+    if (!p && !rec.code && (idx.byName.has(norm(rec.name)) || idx.byKey.has(nameKey(rec.name)) || (rec.article && idx.byArticle.has(norm(rec.article))))) { unresolved.add(rec.name); continue; }
+    if (!p) { p = svNewProduct(idx, rec.name); if (rec.article) { p.article = rec.article; idx.byArticle.set(norm(rec.article), p); } }
+    if (rec.code && !p.code) { p.code = rec.code; idx.byCode.set(rec.code, p); }
     if (rec.retail != null) rememberRetail(p, rec.retail);
     if (rec.group) p.group_id = svGroupId(rec.group);
+    matched++;
   }
+  return { matched, missing: unresolved.size, missingList: [...unresolved] };
 }
 function svUploadStock(parsed) {
   const idx = svIndex();
@@ -328,15 +332,9 @@ export function svImportRows(rows) {
   return type;
 }
 
-// Витрина из статического файла (data/products.json на GitHub Pages) — для
-// покупателя БЕЗ входа. Бесплатно, без сервера, работает офлайн. В файл попадает
-// только витрина (товары, розничная цена, фото, описание, категория); секретное
-// (закупка, поставщики, поступления, штрихкоды) — нет. Если файла нет или он не
-// читается, тихо возвращаем false — приложение грузится с сервера, как раньше.
-// Витрина лежит кусками (`p/00.json…`) с описью `index.json`: подпись куска
-// стоит в адресе, поэтому после мелкой правки заново качается только один
-// кусок, остальное берётся из кэша браузера. Описи нет — читаем старый цельный
-// файл, как раньше.
+// Публичная витрина: части p/*.json с подписями из index.json. Неизменённые
+// части берутся из кэша; без описи поддерживается прежний products.json.
+// Закрытые данные покупатель из этих файлов не получает.
 async function fetchShowcase(base, onChunk) {
   const idx = await fetch(base + 'index.json', { cache: 'no-cache' }).catch(() => null);
   if (idx && idx.ok) {
@@ -438,8 +436,6 @@ export async function refresh({ silent = false } = {}) {
   }
   // Магазин без базы (бесплатный режим): к серверу идти не к кому. Витрина не
   // загрузилась — значит нет интернета: показываем сохранённое и говорим об этом.
-  // Сервера нет: витрина не загрузилась — значит нет интернета. Показываем
-  // сохранённый каталог и честно говорим, что связи нет.
   $('loader').hidden = true;
   const banner = $('offlineBanner');
   banner.textContent = (await loadCache())
@@ -699,7 +695,7 @@ function parseRetailList(rows) {
     const retail = parsePriceNum(rows[r][cols.retail]);
     if (retail == null) { group = name; continue; } // строка без цены — заголовок группы
     const art = (name.match(/арт[\.\s№:]*([0-9a-zа-яё][0-9a-zа-яё\-\/.]*)/i) || [])[1] || null;
-    recs.push({ name, article: art, group, retail });
+    recs.push({ name, code: cols.code !== undefined ? normCode(rows[r][cols.code]) : null, article: cols.article !== undefined ? cellStr(rows[r][cols.article]) || art : art, group, retail });
   }
   return { recs, fileDate };
 }
@@ -984,6 +980,7 @@ function findTwins() {
 export const IMPORT_ORDER = { prices: 0, retail: 1, stock: 2, units: 3, barcodes: 4, photo: 5, sales: 6, stale: 7, contacts: 8 };
 
 export async function smartRun() {
+  if (state.catalogNeedsRefresh) { smartLog('Сначала обнови каталог при стабильном интернете. Сейчас показана сохранённая копия; файлы ещё не применены.'); return; }
   const btn = $('smartRun');
   btn.disabled = true;
   ui.lastMissing = [];
@@ -995,25 +992,29 @@ export async function smartRun() {
   for (const e of todo) {
     try {
       if (e.type === 'prices') svUploadPrices(e.byKey);
-      else if (e.type === 'retail') svUploadRetail(e.parsed);
+      else if (e.type === 'retail') {
+        const r = svUploadRetail(e.parsed);
+        setSmartRowStatus(e, `загружено: ${r.matched}` + (r.missing ? `. Не сопоставлено однозначно: ${r.missing}${missingHint(e, r.missingList)}` : ''));
+        okCount++; continue;
+      }
       else if (e.type === 'stock') svUploadStock(e.parsed);
       else if (e.type === 'sales') {
         const r = svUploadSales(e.parsed);
         setSmartRowStatus(e, `строк продаж: ${r.rows}`
-          + (r.missing ? `. Нет в каталоге: ${r.missing} — продажи по товарам, которых нет в прайсе${missingHint(e, r.missingList)}` : ''));
+          + (r.missing ? `. Не сопоставлено с товарами: ${r.missing}. Строки продаж сохранены${missingHint(e, r.missingList)}` : ''));
         okCount++; continue;
       }
       else if (e.type === 'contacts') svUploadContacts(e.parsed);
       else if (e.type === 'units') {
         const r = svUploadUnits(e.parsed);
         setSmartRowStatus(e, `единиц: ${r.units}` + (r.products ? `, фасовки у товаров: ${r.products}` : '')
-          + (r.missing ? `. Нет в каталоге: ${r.missing} — это позиции, которых нет в прайсе (обычно снятые с продажи)${missingHint(e, r.missingList)}` : ''));
+          + (r.missing ? `. Не сопоставлено по коду товара: ${r.missing}. Проверь коды и состав выгрузок${missingHint(e, r.missingList)}` : ''));
         okCount++; continue;
       }
       else if (e.type === 'barcodes') {
         const r = svUploadBarcodes(e.parsed);
         setSmartRowStatus(e, `новых штрихкодов: ${r.added}, привязано к товарам: ${r.matched}`
-          + (r.missing ? `. Нет в каталоге: ${r.missing} — штрихкоды от товаров, которых нет в прайсе${missingHint(e, r.missingList)}` : ''));
+          + (r.missing ? `. Не сопоставлено с товарами: ${r.missing}. Нужен код или однозначное название${missingHint(e, r.missingList)}` : ''));
         okCount++; continue;
       }
       else { setSmartRowStatus(e, 'пропущен (пока не поддержан)'); continue; }
@@ -1021,8 +1022,7 @@ export async function smartRun() {
     } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
     }
     state.products.sort((a, b) => cmpRu(a.name, b.name));
-    // Разобранные файлы больше не нужны: это десятки тысяч строк, которые
-    // иначе висели бы в памяти телефона до перезагрузки страницы.
+    // Освобождаем разобранные строки файлов, чтобы не удерживать их в памяти.
     for (const e of ui.smartEntries) { e.parsed = null; e.byKey = null; e.rows = null; }
     const tidy = tidyMemory();   // выкинуть залежавшуюся историю цен и старые отчёты
     // Одни и те же товары под ДВУМЯ кодами — это дубли в самой 1С, а не в

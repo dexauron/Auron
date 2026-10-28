@@ -96,6 +96,28 @@ process.on('exit', (code) => { if (!completed && code === 0) { console.error('FA
     await page.waitForFunction(() => !document.getElementById('loginError').hidden);
     chk(await page.evaluate(() => /Пароль каталога не подошёл/.test(document.getElementById('loginError').textContent)
       && !window.WM_PUBLISH._state().session), 'старый пароль отклонён с отдельным сообщением');
+    for (const failure of ['missing-manifest', 'invalid-manifest']) {
+      await page.evaluate(async () => {
+        const P = window.WM_PUBLISH; await P.unlockSecret('new-owner-fixture'); P.applyServerless('new-owner-fixture');
+        await (await import('./js/modules/publish.js')).rememberSession();
+        document.querySelectorAll('.sheet-backdrop').forEach((node) => { node.hidden = true; });
+      });
+      const file = `${DP}/catalog.enc`;
+      const original = files.get(file);
+      if (failure === 'invalid-manifest') files.set(file, '{fixture: interrupted response');
+      else files.delete(file);
+      const held = await page.evaluate(async () => {
+        const P = await import('./js/modules/publish.js');
+        const restored = await P.restoreSession();
+        const S = await import('./js/modules/store.js');
+        return { restored, saved: !!localStorage.getItem(P.SV_AUTH_KEY), role: S.state.role,
+          code: S.state.products[0]?.code, notice: S.state.sessionWarning || '' };
+      });
+      chk(held.restored && held.saved && held.role === 'admin' && held.code === '001' && held.notice,
+        `${failure}: при прежнем подтверждённом ключе временный сбой данных не удаляет вход и открывает свою сохранённую копию`);
+      files.set(file, original);
+    }
+    await logout(); await page.click('#adminBtn');
     files.delete(`${DP}/catalog.enc`);
     await page.fill('#loginPassword', 'new-owner-fixture'); await page.click('#loginSubmit');
     await page.waitForFunction(() => window.WM_PUBLISH._state().session || !document.getElementById('loginError').hidden);

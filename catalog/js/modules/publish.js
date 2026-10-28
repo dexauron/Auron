@@ -283,12 +283,21 @@ function rawUrl(file) {
 // null ТОЛЬКО если файла ещё нет (404). Сбой сети — исключение (чтобы не
 // спутать обрыв связи с «файла нет» и случайно не затереть каталог первой настройкой).
 async function fetchRaw(file) {
+  return fetchCatalogText(rawUrl(file) + '?t=' + Date.now(), true);
+}
+async function fetchCatalogText(url, raw = false) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
   let r;
-  try { r = await fetch(rawUrl(file) + '?t=' + Date.now(), { cache: 'no-store' }); }
-  catch (e) { const err = new Error('Нет связи с каталогом'); err.code = 'NETWORK'; throw err; }
-  if (r.status === 404) return null;
-  if (!r.ok) { const err = new Error('Не удалось скачать данные (' + r.status + ')'); err.code = r.status >= 500 ? 'NETWORK' : 'ACCESS'; throw err; }
-  return r.text();
+  try {
+    r = await fetch(url, { ...(raw ? { cache: 'no-store' } : {}), signal: controller.signal });
+    if (r.status === 404 && raw) return null;
+    if (!r.ok) { const err = new Error('Не удалось скачать данные (' + r.status + ')'); err.code = r.status >= 500 ? 'NETWORK' : 'ACCESS'; throw err; }
+    return await r.text();
+  } catch (e) {
+    if (e.code === 'NETWORK' || e.code === 'ACCESS') throw e;
+    const err = new Error('Нет связи с каталогом'); err.code = 'NETWORK'; throw err;
+  } finally { clearTimeout(timer); }
 }
 async function rawExists(file) {
   try { return (await fetchRaw(file)) != null; } catch (e) { return false; }
@@ -296,12 +305,9 @@ async function rawExists(file) {
 // Кусок читаем с подписью в адресе: изменился — скачается заново, не изменился
 // — придёт из кэша браузера. Так вход после мелкой правки не тянет весь каталог.
 async function fetchPart(file, h, keyTag) {
-  let r;
   // Один plaintext-hash при смене ключа соответствует ДРУГОМУ шифртексту.
   // Конверт роли меняется вместе с ключом; его публичная подпись разделяет кэш.
-  try { r = await fetch(rawUrl(file) + '?h=' + h + '&k=' + keyTag); } catch (e) { const err = new Error('Нет связи с каталогом'); err.code = 'NETWORK'; throw err; }
-  if (!r.ok) { const err = new Error('Не удалось скачать часть каталога (' + r.status + ')'); err.code = r.status >= 500 ? 'NETWORK' : 'ACCESS'; throw err; }
-  return r.text();
+  return fetchCatalogText(rawUrl(file) + '?h=' + h + '&k=' + keyTag);
 }
 // полный товар без служебных полей индекса (начинаются с "_")
 function cleanProductsFull() {
@@ -501,7 +507,7 @@ async function catalogFiles(password, rotate) {
 
 export async function publishFull(password, { onProgress = null, rotate = false } = {}) {
   if (!state.isAdmin) throw new Error('FORBIDDEN');
-  if (_cat?.version === 4 && (!_cat.keys || !_cat.mani)) throw new Error('Для публикации подключись к интернету и открой каталог заново.');
+  if (_cat?.version === 4 && (!_cat.keys || !_cat.mani)) throw new Error('Показана сохранённая копия. Перед публикацией открой каталог заново при стабильном интернете.');
   const prevIdx = await loadPubIndex();
   const { files, index } = await showcaseFiles(prevIdx);
   files.push({ path: `${CFG.DATA_PATH}/${INDEX_FILE}`, content: JSON.stringify(index) });
@@ -522,6 +528,8 @@ export async function publishFull(password, { onProgress = null, rotate = false 
 
 // Разложить открытый каталог по состоянию приложения.
 function applySnapshot(data, role) {
+  state.sessionWarning = '';
+  state.catalogNeedsRefresh = false;
   state.groups = data.groups || [];
   state.suppliers = data.suppliers || [];
   state.products = (data.products || []).slice().sort(byName);
@@ -610,7 +618,8 @@ export async function clearSvAuth() {
 }
 export async function restoreSession() {
   let saved;
-  try { saved = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null'); } catch (e) { await clearSvAuth(); return false; }
+  try { saved = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null'); }
+  catch (e) { state.sessionWarning = 'Не удалось прочитать сохранённый вход. Данные устройства не удалены. Попробуй открыть каталог снова.'; return false; }
   if (!saved) return false;
   // Однократный переход со старого хранения пароля — только после проверки.
   if (typeof saved.pw === 'string') {
@@ -621,30 +630,46 @@ export async function restoreSession() {
       return true;
     } catch (e) { await clearSvAuth(); return false; }
   }
-  const device = await idbGet(AUTH_DEVICE).catch(() => null);
+  let device;
+  try { device = await idbGet(AUTH_DEVICE); }
+  catch (e) { state.sessionWarning = 'Не удалось прочитать сохранённый вход. Обнови страницу: данные устройства не удалены.'; return false; }
+  if (!device) { state.sessionWarning = 'Ключ сохранённого входа не найден на устройстве. Войди по паролю каталога.'; return false; }
   if (saved.v !== 2 || !device || saved.role !== device.role || !ROLES.includes(device.role)
     || device.version !== 4 || device.key?.extractable !== false) { await clearSvAuth(); return false; }
-  let data, mani, keys;
+  let data, mani, keys, verifiedKeys = false, revoked = false, cached = false;
   try {
     const keysRaw = await fetchRaw(KEYS_FILE);
-    if (keysRaw == null) throw new Error('BAD_PASSWORD');
+    if (keysRaw == null) throw new Error('INVALID_CATALOG');
     keys = JSON.parse(keysRaw);
-    if (keys.v !== device.version || !keys[device.role] || await digest(JSON.stringify(keys[device.role])) !== device.tag) throw new Error('BAD_PASSWORD');
+    if (keys.v !== device.version) throw new Error('INVALID_CATALOG');
+    if (!keys[device.role] || await digest(JSON.stringify(keys[device.role])) !== device.tag) { revoked = true; throw new Error('BAD_PASSWORD'); }
+    verifiedKeys = true;
     ({ data, mani } = await readRoleCatalog(device.key, device.role, device.version, false, device.tag));
   } catch (e) {
-    if (e.code !== 'NETWORK') { await clearSvAuth(); return false; }
+    // Отзыв — изменение/удаление конверта роли, а не пропавшая часть или
+    // прерванное обновление. Временная ошибка не удаляет ключ с телефона.
+    if (revoked) { await clearSvAuth(); return false; }
+    if (e.code !== 'NETWORK' && !verifiedKeys) {
+      state.sessionWarning = 'Не удалось проверить сохранённый вход. Данные входа сохранены на устройстве. Обнови страницу при стабильном интернете.';
+      return false;
+    }
     // Без сети отзыв узнать нельзя. Доступ даёт проверенный ключ к своей копии,
     // а не роль из localStorage; после появления сети проверка повторится.
     const cache = await idbGet(PRIVATE_DEVICE).catch(() => null);
     try {
       if (!cache || cache.role !== device.role) throw new Error('BAD_PASSWORD');
       data = await keyDecrypt(device.key, cache.body, roleContext(device.role, 'offline'));
-    } catch (err) { await clearSvAuth(); return false; }
+    } catch (err) {
+      state.sessionWarning = 'Не удалось открыть сохранённую копию. Данные входа сохранены. Попробуй снова при стабильном интернете.';
+      return false;
+    }
     keys = null; mani = null;
+    cached = true;
   }
   _cat = { version: device.version, role: device.role, key: device.key, keys, mani, tag: device.tag,
     staff: null, staffPassword: device.role === 'owner' ? data.staffPassword || null : null };
   applySnapshot(data, device.role);
+  if (cached) { state.catalogNeedsRefresh = true; state.sessionWarning = 'Показана сохранённая копия: сервер пока не отдал все данные. Вход сохранён. Перед импортом и публикацией обнови страницу при стабильном интернете.'; }
   // Нет актуальной описи — публикация ждёт сети, офлайн-просмотр работает.
   if (device.role === 'owner') applyServerless(null); else applyStaff(null);
   state.securityNeedsUpgrade = device.version !== 4;

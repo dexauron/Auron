@@ -56,5 +56,10 @@ process.on('exit', (code) => { if (!complete && code === 0) process.exitCode = 1
   await page.goto('http://localhost:8123/recover.html');
   chk(await page.evaluate(() => document.body.hasAttribute('data-recovery')
     && !document.getElementById('startupNotice').hidden), 'отдельная ссылка восстановления открывается независимо от главного экрана');
+  await Promise.all([page.waitForNavigation({ waitUntil: 'commit' }), page.click('#startupReload')]);
+  const returned = await page.waitForFunction(() => !!document.querySelector('.card[data-id]'), null, { timeout: 4000 })
+    .then(() => true).catch(() => false);
+  chk(returned && await page.evaluate(() => !document.body.hasAttribute('data-recovery')),
+    'кнопка на отдельной странице восстановления возвращает в работающий каталог');
   complete = true; await done(b);
 })().catch((e) => { console.error(e); process.exitCode = 1; });

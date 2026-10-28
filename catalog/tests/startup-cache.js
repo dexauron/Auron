@@ -9,7 +9,7 @@ const root = path.join(__dirname, '..');
 const source = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 const mime = { '.js': 'application/javascript', '.html': 'text/html', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
 const currentHtml = source('index.html');
-const oldHtml = currentHtml.replace(/<script src="js\/boot\.js"><\/script>\s*/, '')
+const oldHtml = currentHtml.replace(/<script src="js\/boot\.js(?:\?[^\"]*)?"><\/script>\s*/, '')
   .replace('<body>', '<body><button id="fabAdd" hidden>+</button>');
 const oldApp = source('js/modules/app.js').replace("  $('menuAddProduct').addEventListener", "  $('fabAdd').addEventListener('click', () => openForm(null));\n  $('menuAddProduct').addEventListener");
 const sw = source('sw.js'), cacheName = sw.match(/const CACHE = '([^']+)'/)[1];

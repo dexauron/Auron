@@ -505,6 +505,7 @@ export function renderAll() {
   renderPickLists();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
+  if (state.sessionWarning) { $('offlineBanner').textContent = state.sessionWarning; $('offlineBanner').hidden = false; }
   window.dispatchEvent(new Event('wm:ready'));
 }
 
