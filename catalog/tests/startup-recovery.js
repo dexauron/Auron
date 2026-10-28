@@ -61,5 +61,8 @@ process.on('exit', (code) => { if (!complete && code === 0) process.exitCode = 1
     .then(() => true).catch(() => false);
   chk(returned && await page.evaluate(() => !document.body.hasAttribute('data-recovery')),
     'кнопка на отдельной странице восстановления возвращает в работающий каталог');
+  await page.goto('http://localhost:8123/recover.html?wm-reload=1', { waitUntil: 'commit' });
+  await page.waitForFunction(() => !!document.querySelector('.card[data-id]'));
+  chk(await page.evaluate(() => !document.body.hasAttribute('data-recovery')), 'переход от прежнего загрузчика восстановления тоже возвращает в каталог');
   complete = true; await done(b);
 })().catch((e) => { console.error(e); process.exitCode = 1; });
