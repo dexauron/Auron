@@ -2,14 +2,17 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self' https:; font-src 'self' data:; worker-src 'self' blob:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#10141e" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f4f6fa" media="(prefers-color-scheme: light)">
   <title>Каталог товаров</title>
   <link rel="icon" href="icons/icon-192.png" type="image/png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="ui.css">
 </head>
 <body>
 
@@ -44,7 +47,7 @@
     <div class="search-row">
       <div class="search-wrap">
         <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input type="search" id="searchInput" class="search-input" placeholder="Название, код, штрихкод…"
+        <input type="search" id="searchInput" class="search-input" placeholder="Поиск товара…" aria-label="Поиск по названию, коду или штрихкоду"
                name="wm-q" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search"
                inputmode="search" autocapitalize="off" aria-autocomplete="none"
                data-form-type="other" data-lpignore="true" data-1p-ignore data-bwignore list="recentQ">
@@ -64,6 +67,10 @@
   </header>
 
   <!-- Плашки состояния -->
+  <div class="banner banner-warn" id="startupNotice" role="status" aria-live="polite" hidden>
+    <p id="startupMessage"></p>
+    <button class="btn btn-secondary" id="startupReload" type="button">Обновить приложение</button>
+  </div>
   <div class="banner banner-warn" id="setupBanner" hidden>
     Каталог ещё не настроен: в <code>js/config.js</code> не указано, откуда брать витрину.
   </div>
@@ -196,9 +203,6 @@
   <!-- Реплика волка. Живёт поверх страницы: «липкая» шапка её бы обрезала -->
   <div class="wolf-bubble" id="wolfBubble" hidden></div>
 
-  <!-- Кнопка добавления (только админ) -->
-  <button class="fab" id="fabAdd" hidden title="Добавить товар" aria-label="Добавить товар"><i data-ic="plus"></i></button>
-
   <!-- Нижняя панель: главный способ переключаться между разделами.
        Так устроено любое продуктовое приложение — большие пальцы дотягиваются
        до низа экрана, а не до шапки. -->
@@ -214,7 +218,7 @@
     <button class="btn btn-primary" id="compareOpen">Сравнить (<span id="compareCount">0</span>)</button>
   </div>
 
-  <nav class="tabbar" id="tabbar">
+  <nav class="tabbar" id="tabbar" aria-label="Разделы каталога">
     <button class="tab active" data-tab="catalog">
       <span class="tab-ico"><i data-ic="catalog"></i></span><span class="tab-txt">Каталог</span>
     </button>
@@ -290,16 +294,16 @@
         <!-- логотип магазина из настроек; его нет — картинка не показывается -->
         <img class="login-logo" alt="" hidden>
         <h2 class="sheet-title login-title">Вход</h2>
-        <p class="muted login-sub">Введи пароль своего аккаунта — программа сама
+        <p class="muted login-sub" id="loginHint">Введи пароль своего аккаунта — программа сама
         определит доступ: кассир, аналитик или администратор</p>
         <form id="loginForm">
           <div id="loginEmailWrap" hidden>
-            <label class="field-label">Email администратора <span class="hint">— спрашивается один раз</span></label>
+            <label class="field-label" for="loginEmail">Email администратора <span class="hint">— спрашивается один раз</span></label>
             <input type="email" id="loginEmail" class="input" autocomplete="username">
           </div>
-          <label class="field-label">Пароль</label>
-          <input type="password" id="loginPassword" class="input" required autocomplete="current-password">
-          <div class="form-error" id="loginError" hidden></div>
+          <label class="field-label" for="loginPassword">Пароль</label>
+          <input type="password" id="loginPassword" aria-describedby="loginHint loginError" class="input" required autocomplete="current-password">
+          <div class="form-error" role="alert" aria-live="polite" id="loginError" hidden></div>
           <button type="submit" class="btn btn-primary btn-block" id="loginSubmit">Войти</button>
         </form>
         <button class="btn btn-ghost btn-block" id="loginDevice">Настройки этого устройства</button>
@@ -367,9 +371,9 @@
         <h2 class="sheet-title">Цена на ценнике другая</h2>
         <p class="muted" id="shelfName"></p>
         <div class="shelf-ours">В каталоге: <b id="shelfOurs"></b></div>
-        <label class="field-label">Что написано на ценнике</label>
+        <label class="field-label" for="shelfPrice">Что написано на ценнике</label>
         <input type="text" id="shelfPrice" class="input money" inputmode="decimal" placeholder="95">
-        <div class="form-error" id="shelfError" hidden></div>
+        <div class="form-error" role="alert" aria-live="polite" id="shelfError" hidden></div>
         <button class="btn btn-primary btn-block" id="shelfSend">Сообщить в магазин</button>
         <p class="ios-note">Уйдёт владельцу в WhatsApp прямо сейчас. Неверный ценник — это то,
         что он поправит сегодня же: на кассе должно быть ровно то, что на полке.</p>
@@ -392,11 +396,11 @@
           <button type="button" data-star="4" aria-label="4"><i data-ic="star"></i></button>
           <button type="button" data-star="5" aria-label="5"><i data-ic="star"></i></button>
         </div>
-        <label class="field-label">Как вас зовут <span class="hint">— по желанию</span></label>
+        <label class="field-label" for="rateName">Как вас зовут <span class="hint">— по желанию</span></label>
         <input type="text" id="rateName" class="input" maxlength="40" placeholder="Например: Хеда">
-        <label class="field-label">Пара слов <span class="hint">— по желанию</span></label>
+        <label class="field-label" for="rateText">Пара слов <span class="hint">— по желанию</span></label>
         <textarea id="rateText" class="input" rows="3" maxlength="200" placeholder="Свежее, беру постоянно"></textarea>
-        <div class="form-error" id="rateError" hidden></div>
+        <div class="form-error" role="alert" aria-live="polite" id="rateError" hidden></div>
         <button class="btn btn-primary btn-block" id="rateSend">Отправить в магазин</button>
         <p class="ios-note">Отзыв уйдёт владельцу в WhatsApp. Он добавит его в каталог, и его
         увидят соседи. Ничего не публикуется само.</p>
@@ -416,15 +420,15 @@
       </div>
       <div class="sheet-body">
         <div class="ios-group-title">Добавить отзыв</div>
-        <label class="field-label">Код товара <span class="hint">— он есть в сообщении покупателя</span></label>
+        <label class="field-label" for="revCode">Код товара <span class="hint">— он есть в сообщении покупателя</span></label>
         <input type="text" id="revCode" class="input" inputmode="numeric" placeholder="5940">
-        <label class="field-label">Имя</label>
+        <label class="field-label" for="revName">Имя</label>
         <input type="text" id="revName" class="input" maxlength="40" placeholder="Хеда">
-        <label class="field-label">Оценка</label>
+        <label class="field-label" for="revStars">Оценка</label>
         <input type="number" id="revStars" class="input" min="1" max="5" value="5">
-        <label class="field-label">Отзыв</label>
+        <label class="field-label" for="revText">Отзыв</label>
         <textarea id="revText" class="input" rows="3" maxlength="200" placeholder="Свежее, беру постоянно"></textarea>
-        <div class="form-error" id="revError" hidden></div>
+        <div class="form-error" role="alert" aria-live="polite" id="revError" hidden></div>
         <button class="btn btn-primary btn-block" id="revAdd">Добавить</button>
         <div id="reviewsBody"></div>
       </div>
@@ -490,9 +494,9 @@
         <h2 class="sheet-title">Публикация на GitHub</h2>
         <p class="muted">Каталог для покупателей хранится бесплатно на GitHub — без сервера и без VPN. Чтобы приложение сохраняло его туда, нужно один раз вставить «ключ». Ключ хранится только на этом устройстве.</p>
         <div id="publishStatus" class="publish-status"></div>
-        <label class="field-label">Ключ GitHub</label>
+        <label class="field-label" for="ghTokenInput">Ключ GitHub</label>
         <input type="password" id="ghTokenInput" class="input" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
-        <div class="form-error" id="publishError" hidden></div>
+        <div class="form-error" role="alert" aria-live="polite" id="publishError" hidden></div>
         <button class="btn btn-primary btn-block" id="ghTokenSave">Сохранить и проверить</button>
         <button class="btn btn-secondary btn-block" id="ghPublishNow">Опубликовать витрину сейчас</button>
         <p class="ios-note">Ключ хранится только на этом телефоне и может пропасть, если
@@ -525,13 +529,13 @@
           <label class="field-label">Фотографии</label>
           <div class="photo-manager" id="photoManager"></div>
 
-          <label class="field-label">Название * <span class="hint">— как в кассе</span></label>
+          <label class="field-label" for="fName">Название * <span class="hint">— как в кассе</span></label>
           <input type="text" id="fName" class="input" required placeholder="Хот-дог датский">
 
-          <label class="field-label">Описание <span class="hint">— текст в карточке товара</span></label>
+          <label class="field-label" for="fDescription">Описание <span class="hint">— текст в карточке товара</span></label>
           <textarea id="fDescription" class="input" rows="3" placeholder="Краткое описание товара для покупателей"></textarea>
 
-          <label class="field-label">Группа</label>
+          <label class="field-label" for="fGroup">Группа</label>
           <select id="fGroup" class="input"></select>
 
           <label class="field-label">Поставщики <span class="hint">— можно несколько</span></label>
@@ -543,11 +547,11 @@
 
           <div class="input-pair">
             <div>
-              <label class="field-label">Код товара</label>
+              <label class="field-label" for="fCode">Код товара</label>
               <input type="text" id="fCode" class="input" inputmode="numeric" placeholder="1024">
             </div>
             <div>
-              <label class="field-label">Артикул</label>
+              <label class="field-label" for="fArticle">Артикул</label>
               <input type="text" id="fArticle" class="input" placeholder="ХД-01">
             </div>
           </div>
@@ -560,16 +564,16 @@
 
           <label class="check-row"><input type="checkbox" id="fWeighted"> Весовой товар</label>
 
-          <label class="field-label">Единица продажи <span class="hint">— шт, кг, упак… (заполняется импортом из 1С)</span></label>
+          <label class="field-label" for="fUnit">Единица продажи <span class="hint">— шт, кг, упак… (заполняется импортом из 1С)</span></label>
           <input type="text" id="fUnit" class="input" placeholder="шт">
 
-          <label class="field-label">Отдел / секция кассы <span class="hint">— если есть</span></label>
+          <label class="field-label" for="fDepartment">Отдел / секция кассы <span class="hint">— если есть</span></label>
           <input type="text" id="fDepartment" class="input" inputmode="numeric" placeholder="2">
 
-          <label class="field-label">Примечание</label>
+          <label class="field-label" for="fNote">Примечание</label>
           <textarea id="fNote" class="input" rows="2" placeholder="Пробивать по коду, штрихкода нет"></textarea>
 
-          <div class="form-error" id="formError" hidden></div>
+          <div class="form-error" role="alert" aria-live="polite" id="formError" hidden></div>
           <button type="submit" class="btn btn-primary btn-block" id="formSubmit">Сохранить</button>
         </form>
         <button class="btn btn-ghost sheet-close" data-close="formSheet">Отмена</button>
@@ -603,15 +607,15 @@
         <h2 class="sheet-title">Цена в другом магазине</h2>
         <p class="muted" id="compProductName"></p>
         <form id="competitorForm">
-          <label class="field-label">Магазин</label>
+          <label class="field-label" for="compStoreSearch">Магазин</label>
           <input type="search" id="compStoreSearch" class="input" placeholder="Найти или создать магазин…" autocomplete="off">
           <div id="compStoreList" class="comp-store-list"></div>
           <div id="compChosen" class="comp-chosen" hidden></div>
 
-          <label class="field-label">Их розничная цена, ₽</label>
+          <label class="field-label" for="compPrice">Их розничная цена, ₽</label>
           <input type="text" id="compPrice" class="input money" inputmode="decimal" placeholder="149,90" required>
 
-          <div class="form-error" id="compError" hidden></div>
+          <div class="form-error" role="alert" aria-live="polite" id="compError" hidden></div>
           <button type="submit" class="btn btn-primary btn-block" id="compSubmit">Сохранить цену</button>
         </form>
         <button class="btn btn-ghost sheet-close" data-close="competitorAddSheet">Отмена</button>
@@ -672,7 +676,7 @@
         <h2 class="sheet-title">Калькулятор цены</h2>
         <p class="muted" id="calcProductName"></p>
 
-        <label class="field-label">Какую цену предлагают, ₽</label>
+        <label class="field-label" for="calcPrice">Какую цену предлагают, ₽</label>
         <input type="text" id="calcPrice" class="input money" inputmode="decimal" placeholder="1 850">
 
         <label class="field-label">Эта цена — за что?</label>
@@ -682,11 +686,11 @@
         </div>
 
         <div id="calcPackWrap">
-          <label class="field-label" id="calcPackLabel">Штук в упаковке</label>
+          <label class="field-label" id="calcPackLabel" for="calcPackQty">Штук в упаковке</label>
           <input type="number" id="calcPackQty" class="input" inputmode="numeric" step="1" min="1" placeholder="48">
         </div>
 
-        <label class="field-label">Скидка, % — если обещают</label>
+        <label class="field-label" for="calcDiscount">Скидка, % — если обещают</label>
         <input type="number" id="calcDiscount" class="input" inputmode="decimal" step="0.1" min="0" max="100" placeholder="0">
 
         <div id="calcResult"></div>
@@ -705,20 +709,20 @@
         Заказывать надо не «когда мало», а когда остатка хватит ровно до приезда
         следующей поставки — поэтому важно знать сроки.</p>
 
-        <label class="field-label">Доставка от поставщика, дней</label>
+        <label class="field-label" for="orLead">Доставка от поставщика, дней</label>
         <input type="number" id="orLead" class="input" inputmode="numeric" step="1" min="0" max="90">
         <p class="muted field-hint">Сколько дней проходит от заказа до приезда товара.</p>
 
-        <label class="field-label">Как часто делаем заказ, дней</label>
+        <label class="field-label" for="orCycle">Как часто делаем заказ, дней</label>
         <input type="number" id="orCycle" class="input" inputmode="numeric" step="1" min="1" max="90">
         <p class="muted field-hint">Раз в неделю — 7. Между заказами запас должен дожить.</p>
 
-        <label class="field-label">Страховой запас, дней</label>
+        <label class="field-label" for="orSafety">Страховой запас, дней</label>
         <input type="number" id="orSafety" class="input" inputmode="numeric" step="1" min="0" max="90">
         <p class="muted field-hint">Подушка на всплеск спроса и опоздание поставки.</p>
 
         <div class="calc-out" id="orExample"></div>
-        <div class="form-error" id="orError" hidden></div>
+        <div class="form-error" role="alert" aria-live="polite" id="orError" hidden></div>
         <button type="button" class="btn btn-primary btn-block" id="orSave">Сохранить</button>
         <button class="btn btn-ghost sheet-close" data-close="orderRulesSheet">Закрыть</button>
       </div>
@@ -849,9 +853,9 @@
         <b>все их устройства выйдут из системы</b> — скажи новый пароль смене.
         Меняй его при увольнении сотрудника.</p>
         <form id="staffPassForm">
-          <label class="field-label">Новый пароль магазина <span class="hint">— от 6 символов</span></label>
-          <input type="text" id="newStaffPass" class="input" required minlength="6" autocomplete="off">
-          <div class="form-error" id="staffPassError" hidden></div>
+          <label class="field-label" for="newStaffPass">Новый пароль магазина <span class="hint">— от 6 символов</span></label>
+          <input type="password" id="newStaffPass" class="input" required minlength="12" maxlength="1024" autocomplete="new-password">
+          <div class="form-error" role="alert" aria-live="polite" id="staffPassError" hidden></div>
           <button type="submit" class="btn btn-primary btn-block" id="staffPassSubmit">Сменить пароль и выгнать устройства</button>
         </form>
         <button class="btn btn-secondary btn-block" id="btnLogoutStaff">Только выгнать все устройства сотрудников</button>
@@ -930,12 +934,15 @@
         даже у того, кто успел его записать. Займёт столько же, сколько обычная публикация.</p>
         <form id="ownerPassForm">
           <div class="ios-group">
-            <div class="ios-row"><span class="ios-row-title">Новый пароль</span>
-              <input type="password" id="ownerPassNew" class="ios-inp" autocomplete="new-password" required></div>
-            <div class="ios-row"><span class="ios-row-title">Ещё раз</span>
-              <input type="password" id="ownerPassAgain" class="ios-inp" autocomplete="new-password" required></div>
+            <div class="ios-row"><label class="ios-row-title" for="ownerPassNew">Новый пароль</label>
+              <input type="password" id="ownerPassNew" class="ios-inp" autocomplete="new-password" minlength="12" maxlength="1024" required></div>
+            <div class="ios-row"><label class="ios-row-title" for="ownerPassAgain">Ещё раз</label>
+              <input type="password" id="ownerPassAgain" class="ios-inp" autocomplete="new-password" minlength="12" maxlength="1024" required></div>
+            <div class="ios-row"><label class="ios-row-title" for="ownerPassStaff">Новый пароль сотрудника</label>
+              <input type="password" id="ownerPassStaff" class="ios-inp" autocomplete="new-password" minlength="12" maxlength="1024"></div>
           </div>
-          <div class="form-error" id="ownerPassError" hidden></div>
+          <p class="ios-note">От 12 символов. При обновлении защиты задай здесь и новый пароль сотрудника. В дальнейшем поле сотрудника можно оставить пустым.</p>
+          <div class="form-error" role="alert" aria-live="polite" id="ownerPassError" hidden></div>
           <button type="submit" class="btn btn-primary btn-block" id="ownerPassSubmit" style="margin-top:16px">Сменить пароль</button>
         </form>
         <p class="ios-note">Забытый пароль восстановить некому — запишите новый там,
@@ -1026,7 +1033,7 @@
         <div class="ios-group">
           <div class="ios-row"><input type="text" id="askText" class="ios-inp ios-inp-wide" maxlength="120" placeholder="что ищешь"></div>
         </div>
-        <div class="form-error" id="askError" hidden></div>
+        <div class="form-error" role="alert" aria-live="polite" id="askError" hidden></div>
         <p class="ios-note">Откроется WhatsApp с готовым вопросом — останется отправить.
         Так магазин узнаёт, чего людям не хватает.</p>
       </div>
@@ -1049,7 +1056,7 @@
             <input type="text" id="repPrice" class="ios-inp money" inputmode="decimal" placeholder="0"></div>
           <div class="ios-row"><input type="text" id="repStore" class="ios-inp ios-inp-wide" maxlength="60" placeholder="какой магазин (необязательно)"></div>
         </div>
-        <div class="form-error" id="repError" hidden></div>
+        <div class="form-error" role="alert" aria-live="polite" id="repError" hidden></div>
         <p class="ios-note">Подсказка сохранится на твоём телефоне. Когда захочешь — отправишь
         владельцу одним сообщением в разделе «Магазин».</p>
       </div>
@@ -1121,7 +1128,7 @@
           <div class="ios-row"><input type="text" id="ordWho" class="ios-inp ios-inp-wide" maxlength="40" placeholder="имя или смена"></div>
           <div class="ios-row"><input type="text" id="ordNote" class="ios-inp ios-inp-wide" maxlength="140" placeholder="примечание"></div>
         </div>
-        <div class="form-error" id="ordError" hidden></div>
+        <div class="form-error" role="alert" aria-live="polite" id="ordError" hidden></div>
         <div class="ios-group" style="margin-top:14px">
           <button class="ios-row ios-row-action" id="ordSendWa"><span class="ios-row-title">Отправить заказ поставщику в WhatsApp</span></button>
         </div>
@@ -1194,10 +1201,11 @@
     <button class="lightbox-close" id="lightboxClose" aria-label="Закрыть"><i data-ic="close"></i></button>
   </div>
 
-  <div class="toast" id="toast" hidden></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <!-- Библиотека базы лежит рядом (не с чужого CDN) — быстрее старт и работает офлайн -->
   <script src="js/config.js"></script>
+  <script src="js/boot.js?v=142"></script>
   <script type="module" src="js/modules/app.js"></script>
 </body>
 </html>

@@ -50,7 +50,7 @@ export function openProduct(p) {
   $('sheetPhotos').hidden = !state.session;
   $('sheetDots').hidden = !state.session;
   $('sheetPhotos').innerHTML = photos.length
-    ? photos.map((u) => `<img src="${esc(u)}" alt="" onerror="wmImgFail(this)">`).join('')
+    ? photos.map((u) => `<img src="${esc(u)}" alt="" data-photo-fallback>`).join('')
     : `<div class="photo-placeholder">${ic('box', 'ic-ph')}</div>`;
   $('sheetDots').innerHTML = photos.length > 1
     ? photos.map((_, i) => `<span class="dot${i === 0 ? ' active' : ''}"></span>`).join('')
@@ -204,7 +204,7 @@ function renderSimilar(p) {
       const ph = (x.photos || []).find((u) => u && String(u).trim());
       const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
       return `<button class="similar-card" data-similar="${esc(x.id)}">
-        <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
+        <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" data-photo-fallback>` : ic('box', 'ic-ph')}</span>
         <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
     }).join('') + '</div>';
 }
@@ -850,7 +850,7 @@ export async function copyText(text, okMsg) {
 function fieldRow(key, val, main = false, copy = false) {
   const cls = main ? ' field-main' : '';
   const copyBtn = (copy || main)
-    ? `<button class="copy-btn" data-copy="${esc(val)}">⧉</button>`
+    ? `<button class="copy-btn" data-copy="${esc(val)}" aria-label="Скопировать поле ${esc(key)}">${ic('copy')}</button>`
     : '';
   return `<div class="field-row${cls}"><span class="field-key">${esc(key)}</span><span class="field-val">${esc(val)}</span>${copyBtn}</div>`;
 }
