@@ -54,7 +54,7 @@ function harness() {
     if (!fs.existsSync(p)) continue;
     vm.runInContext(fs.readFileSync(p,'utf8').replace(/^import .*;\s*$/gm,'').replace(/\bexport\s+/g,''),ctx,{filename:file});
   }
-  vm.runInContext('globalThis.api = { publishFull, unlockAny, unlockSecret, unlockStaff, buildPublicProducts, encryptJSON, decryptJSON, applyServerless, applyStaff, clearSvAuth, rememberSession, restoreSession }; globalThis.cryptoTest = { unwrapCatalogKey, importCatalogKey, keyDecrypt, keyEncrypt };',ctx);
+  vm.runInContext('globalThis.api = { publishFull, unlockAny, unlockSecret, unlockStaff, buildPublicProducts, encryptJSON, decryptJSON, applyServerless, applyStaff, clearSvAuth, rememberSession, restoreSession, recheckAccess, keepStorage }; globalThis.cryptoTest = { unwrapCatalogKey, importCatalogKey, keyDecrypt, keyEncrypt };',ctx);
   return {ctx,files,disk,local,state,api:ctx.api};
 }
 
