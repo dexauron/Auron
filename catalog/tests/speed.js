@@ -180,6 +180,38 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
   chk(own.risen < 2500, `экран «Подорожало» открывается (${own.risen} мс, потолок 2500)`);
   chk(own.card < 2500, `карточка товара открывается (${own.card} мс, потолок 2500)`);
 
+  /* Набор в поле «добавить в список покупок». Аудит нашёл залипание: поиск
+     запускался на каждую букву, и на двух общих буквах («ма» есть в каждом
+     названии) это 315 мс работы на нажатие — нажатия складывались, и поле
+     липло под пальцем. Теперь поиск ждёт, пока человек допечатает. */
+  const shopType = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH;
+    localStorage.setItem('wm_shop_v1', JSON.stringify([
+      { id: 'p1', name: 'x', code: '100001', unit: 'шт', price: 1, qty: 1, done: false }]));
+    P.renderAll();
+    await new Promise((r) => setTimeout(r, 400));
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.getElementById('shopOpen').click();
+    await new Promise((r) => setTimeout(r, 400));
+    const f = document.getElementById('shopFind');
+    f.focus();
+    const type = async (text) => {
+      f.value = '';
+      const t0 = performance.now();
+      for (const ch of text) {
+        f.value += ch;
+        f.dispatchEvent(new Event('input', { bubbles: true }));
+        await new Promise((r) => setTimeout(r, 30));
+      }
+      return Math.round(performance.now() - t0) - text.length * 30;
+    };
+    const worst = Math.max(await type('ма'), await type('колбаса'), await type('100500'));
+    await new Promise((r) => setTimeout(r, 600));          // поиск успевает отработать
+    return { worst, rows: document.querySelectorAll('#shopFindList [data-shop-pick]').length };
+  });
+  chk(shopType.worst < 400, `набор в поле списка покупок не липнет (${shopType.worst} мс, потолок 400)`);
+  chk(shopType.rows > 0, `найденное при этом показывается (${shopType.rows} строк)`);
+
   // Вечерняя выгрузка из 1С: владелец делает её каждый день на телефоне
   const ru = (days) => { const x = new Date(Date.now() - days * 86400000);
     return `${String(x.getDate()).padStart(2, '0')}.${String(x.getMonth() + 1).padStart(2, '0')}.${x.getFullYear()}`; };

@@ -56,7 +56,7 @@ function renderWork() {
       ${o.overdue ? row('orders', 'Просрочено', o.overdue, true) : ''}
       ${row('restock', 'Закончилось на полке', rest ? `${rest} ${plural(rest, 'ждёт', 'ждут', 'ждут')} заказа` : 'пусто')}
       ${row('stale', 'Залежалось', num(ui.staleCount) || 'ничего')}
-      ${state.canPurchase ? row('requests', 'Заявки — списки покупок',
+      ${state.isAdmin ? row('requests', 'Заявки — списки покупок',
     requestsWaiting() ? `${requestsWaiting()} ${plural(requestsWaiting(), 'ждёт', 'ждут', 'ждут')} приёмки` : 'все приняты',
     !!requestsWaiting()) : ''}
     </div>

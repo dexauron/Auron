@@ -430,6 +430,9 @@ function syncControls() {
   if (ui.applyGuestMode) ui.applyGuestMode();   // класс «покупатель» на странице
   if (ui.renderShopBar) ui.renderShopBar();     // полоска «сколько выйдет»
   document.querySelectorAll('.purchase-only').forEach((el) => { el.hidden = !state.canPurchase; });
+  /* Только владельцу: то, что уходит в общий каталог. Сотрудник туда не пишет,
+     и обещать ему сохранение нельзя — список пропал бы при перезагрузке. */
+  document.querySelectorAll('.admin-only').forEach((el) => { el.hidden = !state.isAdmin; });
   const sVal = $('filterSuppliersVal');
   if (sVal) sVal.textContent = state.selSuppliers.length ? `Выбрано: ${state.selSuppliers.length}` : 'Все';
   // значок на вкладке «Подбор»: видно, что фильтр включён, не открывая её

@@ -311,6 +311,80 @@ const SHOP = [
   chk(weighed.qty === 0.33,
     `с весовой этикетки вес сразу становится количеством, его не набирают руками (${weighed.qty} кг)`);
 
+
+  /* ── 9. Список, пришедший ПО ССЫЛКЕ, выгружается полностью ─────────────────
+   * Это главный путь, которым заявка попадает к владельцу: покупатель или
+   * сотрудник присылает ссылку. Аудит нашёл, что по ссылке приходили только
+   * название, код и цена — без артикула, штрихкода, единицы и признака
+   * «весовой». Выгрузка подбирала их из каталога и потому выглядела целой, но
+   * стоило товару уйти из каталога — и в 1С уезжала пустая строка; а у
+   * весового товара кнопка «+» шагала по килограмму вместо полукилограмма. */
+  const linked = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH;
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    localStorage.setItem('wm_shop_v1', '[]');
+    window.location.hash = '#l=101x3-202x2';
+    await new Promise((r) => setTimeout(r, 150));
+    P._shopFromHash();
+    await new Promise((r) => setTimeout(r, 450));
+    return JSON.parse(localStorage.getItem('wm_shop_v1') || '[]');
+  });
+  const lMilk = linked.find((x) => x.code === '101') || {};
+  const lSaus = linked.find((x) => x.code === '202') || {};
+  chk(lMilk.article === 'АРТ-1' && lMilk.barcode === '4600000000011' && lMilk.unit === 'шт',
+    `по ссылке приходят артикул, штрихкод и единица (${lMilk.article} · ${lMilk.barcode} · ${lMilk.unit})`);
+  chk(lSaus.weighted === true && lSaus.unit === 'кг',
+    `и признак «весовой» — от него зависит шаг количества (${lSaus.unit}, весовой: ${lSaus.weighted})`);
+
+  const linkedStep = await page.evaluate(async () => {
+    document.getElementById('shopOpen').click();
+    await new Promise((r) => setTimeout(r, 400));
+    const saus = [...document.querySelectorAll('#shopBody .shop-row')].find((r) => /Колбаса/.test(r.innerText));
+    saus.querySelector('[data-shop-plus]').click();
+    await new Promise((r) => setTimeout(r, 300));
+    return JSON.parse(localStorage.getItem('wm_shop_v1')).find((x) => x.code === '202').qty;
+  });
+  chk(linkedStep === 2.5, `у весового из присланного списка шаг полкило, а не килограмм (${linkedStep})`);
+
+  // и такой список выгружается в 1С целиком, даже если товара уже нет в каталоге
+  const orphan = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH; const s = P._state();
+    const keep = s.products;
+    s.products = [];                       // товары «ушли» из каталога
+    window.__clip = '';
+    document.getElementById('shopCopy1c').click();
+    await new Promise((r) => setTimeout(r, 400));
+    s.products = keep;
+    return window.__clip.split('\n').map((r) => r.split('\t'));
+  });
+  const oMilk = orphan.find((r) => /Молоко/.test(r[2])) || [];
+  chk(oMilk[1] === '4600000000011' && oMilk[3] === 'АРТ-1' && oMilk[4] === 'шт',
+    `выгрузка целая, даже если товар уже убрали из каталога (${oMilk.slice(1, 5).join(' | ')})`);
+
+  /* ── 10. Заявки — только владельцу ─────────────────────────────────────────
+   * Аудит нашёл обещание, которого приложение не держало: сотрудник нажимал
+   * «Сохранить как заявку», видел «Заявка сохранена» — а после перезагрузки
+   * её не было. Заявки лежат в общем каталоге, писать туда может только
+   * владелец. Сотрудник присылает список кнопкой «Отправить в WhatsApp». */
+  const asStaff = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH;
+    P.applyStaff('pw'); P.renderAll();
+    await new Promise((r) => setTimeout(r, 350));
+    P._work('x');
+    await new Promise((r) => setTimeout(r, 300));
+    const rows = P._workRows().join(' | ');
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.getElementById('shopOpen').click();
+    await new Promise((r) => setTimeout(r, 350));
+    const vis = (id) => { const el = document.getElementById(id); if (!el) return false;
+      for (let n = el; n && n !== document.body; n = n.parentElement) if (n.hidden) return false; return true; };
+    return { rows, save: vis('shopSaveReq'), wa: vis('shopWa'), copy: vis('shopCopy1c') };
+  });
+  chk(!asStaff.save, 'сотруднику «Сохранить как заявку» не предлагается — его заявка не сохранилась бы');
+  chk(!/Заявки/.test(asStaff.rows), `и строки «Заявки» у него в «Работе» нет (${asStaff.rows.slice(0, 60)})`);
+  chk(asStaff.wa, 'зато «Отправить в WhatsApp» у него есть — этим он и присылает список владельцу');
+  chk(asStaff.copy, 'и скопировать для 1С он может — это его собственные строки');
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();
