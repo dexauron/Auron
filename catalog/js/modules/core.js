@@ -276,7 +276,7 @@ export function watchErrors() {
  * каталога не заканчивается никогда. По сроку мы просто отступаем — на экране
  * остаётся сохранённая копия, а следующая попытка будет, когда человек
  * вернётся в каталог или появится связь (keepFresh в session.js). */
-export const NET_WAIT = 15000;
+const NET_WAIT = 15000;
 export function netFetch(url, opts = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), NET_WAIT);
