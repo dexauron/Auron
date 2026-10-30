@@ -271,6 +271,18 @@ export function watchErrors() {
 
 /* Обёртка для действий, которые не должны ронять приложение целиком:
  * отрисовка, обработчики кнопок, фоновые задачи. */
+/* Запрос с крайним сроком. Без него «очень плохой интернет» выглядит не как
+ * ошибка, а как вечное ожидание: соединение открыто, ответа нет, и обновление
+ * каталога не заканчивается никогда. По сроку мы просто отступаем — на экране
+ * остаётся сохранённая копия, а следующая попытка будет, когда человек
+ * вернётся в каталог или появится связь (keepFresh в session.js). */
+const NET_WAIT = 15000;
+export function netFetch(url, opts = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), NET_WAIT);
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
+
 export function safely(where, fn) {
   return (...args) => {
     try {

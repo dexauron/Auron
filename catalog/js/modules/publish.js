@@ -706,6 +706,49 @@ export async function restoreSession() {
   return true;
 }
 
+/* ── Быстрый вход: сначала своя копия, сеть потом ────────────────────────────
+ * Владелец: «когда я открываю, сразу показывает, как будто я не вошёл, потом
+ * загружается всё и уже в моём аккаунте».
+ *
+ * Так и было: запуск сперва проверял файл ключей по сети и только потом
+ * поднимал роль. Замер при медленном интернете (задержка 3 с на ответ):
+ * владелец видел кнопку «Войти» и гостевые блоки больше шести секунд.
+ *
+ * Поэтому вход поднимается из копии на устройстве — без единого сетевого
+ * запроса. Копию можно расшифровать только неизвлекаемым ключом этого
+ * устройства, то есть это не «доверие localStorage», а тот же ключ, что и при
+ * обычном входе. Отзыв пароля и свежие данные догоняют сразу после, уже в
+ * фоне (recheckAccess), и экран к тому времени работает.
+ *
+ * Возвращает false, если копии ещё нет (первый вход на этом устройстве) —
+ * тогда зовут обычный restoreSession по сети. */
+export async function restoreFast() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null'); }
+  catch (e) { saved = null; }
+  if (saved && typeof saved.pw === 'string') return false;    // старое хранение — только полный путь
+  let device, cache;
+  try { [device, cache] = await Promise.all([idbGet(AUTH_DEVICE), idbGet(PRIVATE_DEVICE)]); }
+  catch (e) { return false; }
+  if (!device || !cache) return false;
+  if (!ROLES.includes(device.role) || device.version !== 4 || device.key?.extractable !== false
+    || cache.role !== device.role || (saved && (saved.v !== 2 || saved.role !== device.role))) return false;
+  let data;
+  try { data = await keyDecrypt(device.key, cache.body, roleContext(device.role, 'offline')); }
+  catch (e) { return false; }
+  if (!data || !Array.isArray(data.products)) return false;
+  _cat = { version: device.version, role: device.role, key: device.key, keys: null, mani: null, tag: device.tag,
+    staff: null, staffPassword: device.role === 'owner' ? data.staffPassword || null : null };
+  applySnapshot(data, device.role);
+  // Предупреждение НЕ показываем: это обычный запуск, а не сбой. Его поставит
+  // фоновая проверка, если связи не будет совсем.
+  state.catalogNeedsRefresh = true;
+  if (device.role === 'owner') applyServerless(null); else applyStaff(null);
+  state.securityNeedsUpgrade = false;
+  keepStorage();
+  return true;
+}
+
 /* Попросить браузер не вытирать сохранённый вход. Браузеры сами убирают данные
  * редко посещаемых сайтов (Safari — примерно через неделю), а вместе с ними
  * уходит ключ, и человек оказывается перед паролем «ни с того ни с сего».
@@ -718,13 +761,29 @@ export function keepStorage() {
   return Promise.resolve(false);
 }
 
+/* Доступ отозван — закрытое уходит с экрана СРАЗУ, а не после перезагрузки.
+ * Без этого между «ключ стёрли» и «страница перезапустилась» оставалось
+ * несколько секунд, в которые на экране ещё висели закупочные цены и заявки. */
+function dropSessionState() {
+  ui.secretPw = null;
+  state.serverless = false;
+  state.session = null;
+  state.isAdmin = false; state.role = null;
+  state.canPurchase = false; state.canSales = false;
+  state.prices = []; state.sales = []; state.suppliers = []; state.contacts = {};
+  state.competitors = []; state.compPrices = []; state.requests = []; state.orders = [];
+  state.retailHist = {}; state.staffPassword = null;
+  state.products = publicProducts(state.products);   // остаётся только открытое
+  buildIndex();
+}
+
 /* Повторная проверка доступа после входа из сохранённой копии: отозван ли
  * пароль и не пора ли подтянуть свежий каталог. Зовётся из app.js, когда
  * появляется связь. Возвращает:
  *   'revoked' — пароль сменили, вход снят (приложение сообщит и перезапустится)
  *   'ok'      — доступ в силе; если удалось дочитать каталог, он уже свежий
  *   'later'   — связи по-прежнему нет, попробуем позже */
-export async function recheckAccess() {
+export async function recheckAccess(force = false) {
   const active = _cat;
   if (!active || !active.tag || !ROLES.includes(active.role) || active.version !== 4) return 'ok';
   let keys;
@@ -735,13 +794,25 @@ export async function recheckAccess() {
   } catch (e) { return 'later'; }
   if (keys.v !== active.version) return 'later';
   if (!keys[active.role] || await digest(JSON.stringify(keys[active.role])) !== active.tag) {
+    /* Порядок важен: сначала закрытое уходит из памяти, потом стираем ключ с
+       устройства. Наоборот — и между двумя шагами остаётся миг, когда вход уже
+       «снят», а закупочные цены ещё на экране. */
+    dropSessionState();
     await clearSvAuth();
     return 'revoked';
   }
-  if (!active.mani) {
-    // Доступ в силе — дочитываем настоящий каталог, чтобы владелец мог
-    // публиковать без перезагрузки страницы.
+  if (!active.mani || force) {
+    /* Доступ в силе — дочитываем настоящий каталог, чтобы владелец мог
+       публиковать без перезагрузки страницы. */
     try {
+      /* При возврате в каталог после паузы сначала смотрим ТОЛЬКО опись: в ней
+         подписи всех кусков. Ничего не изменилось — расходиться незачем,
+         расшифровка двенадцати тысяч товаров на бюджетном телефоне не бесплатна
+         и человек почувствовал бы её как подвисание при каждом возврате. */
+      if (force && active.mani) {
+        const { mani: head } = await readRoleCatalog(active.key, active.role, active.version, true, active.tag);
+        if (head && JSON.stringify(head.sets) === JSON.stringify(active.mani.sets)) return 'ok';
+      }
       const { data, mani } = await readRoleCatalog(active.key, active.role, active.version, false, active.tag);
       _cat = { ...active, keys, mani };
       applySnapshot(data, active.role);
