@@ -767,7 +767,7 @@ export function keepStorage() {
  *   'revoked' — пароль сменили, вход снят (приложение сообщит и перезапустится)
  *   'ok'      — доступ в силе; если удалось дочитать каталог, он уже свежий
  *   'later'   — связи по-прежнему нет, попробуем позже */
-export async function recheckAccess() {
+export async function recheckAccess(force = false) {
   const active = _cat;
   if (!active || !active.tag || !ROLES.includes(active.role) || active.version !== 4) return 'ok';
   let keys;
@@ -781,9 +781,11 @@ export async function recheckAccess() {
     await clearSvAuth();
     return 'revoked';
   }
-  if (!active.mani) {
-    // Доступ в силе — дочитываем настоящий каталог, чтобы владелец мог
-    // публиковать без перезагрузки страницы.
+  if (!active.mani || force) {
+    /* Доступ в силе — дочитываем настоящий каталог, чтобы владелец мог
+       публиковать без перезагрузки страницы. С force это же зовут при возврате
+       в каталог после паузы: куски с неизменившейся подписью приходят из кэша
+       устройства, так что обычно качается только опись и то, что правили. */
     try {
       const { data, mani } = await readRoleCatalog(active.key, active.role, active.version, false, active.tag);
       _cat = { ...active, keys, mani };
