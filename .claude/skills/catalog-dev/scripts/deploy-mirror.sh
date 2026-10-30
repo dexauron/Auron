@@ -48,14 +48,15 @@ SRC=""
 FOREIGN=""
 if [ -n "$SRC" ] && git cat-file -e "${SRC}^{commit}" 2>/dev/null; then
   # что изменилось в коде деплой-ветки после прошлого зеркалирования
-  FOREIGN="$(cd "$WT" && git diff --name-only "$SRC" -- catalog \
+  # quotepath=false — иначе пути с русскими буквами приходят в «\320\232…»
+  FOREIGN="$(cd "$WT" && git -c core.quotepath=false diff --name-only "$SRC" -- catalog \
     ':(exclude)catalog/data' ':(exclude)catalog/.mirror-source')"
 else
   # метки нет (первый запуск после этой правки) — ловим хотя бы удаления:
   # файл есть в деплой-ветке и нет в рабочей, значит замена его убьёт
-  FOREIGN="$(cd "$WT" && git ls-files catalog | grep -v '^catalog/data/' \
-    | grep -v '^catalog/\.mirror-source$' || true)"
-  FOREIGN="$(for f in $FOREIGN; do [ -e "$REPO_ROOT/$f" ] || echo "$f"; done)"
+  FOREIGN="$(cd "$WT" && git -c core.quotepath=false ls-files catalog \
+    | grep -v '^catalog/data/' | grep -v '^catalog/\.mirror-source$' \
+    | while IFS= read -r f; do [ -e "$REPO_ROOT/$f" ] || printf '%s\n' "$f"; done)"
 fi
 
 if [ -n "$FOREIGN" ]; then
