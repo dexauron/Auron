@@ -271,16 +271,13 @@ function bindEvents() {
   addBackButtons();
   enableSwipeToClose();
 
-  // Вход: одна форма для всех, права определяются по аккаунту.
-  // Сотрудник вводит только пароль магазина. Админ — свой пароль: email
-  // спрашивается один раз, дальше хранится на устройстве и подставляется сам.
-  const ADMIN_EMAIL_KEY = 'wm_admin_email';
-
+  /* Вход — ОДИН пароль и больше ничего (решение владельца 30.10.2026:
+     «вход оставь только пароль»). Роль определяется тем, чей конвертик с
+     ключом открылся: пароль владельца — полные права, пароль сотрудника —
+     рабочая часть. Поле email и подбор служебных аккаунтов остались от
+     времён, когда у каталога был сервер; сервера нет с августа 2026, и этот
+     путь не работал — кнопка просто молчала. Убрано вместе с разметкой. */
   function openLogin() {
-    // email виден сразу, только если служебные аккаунты не настроены в config.js
-    const fileLogin = !!(CFG.STATIC_URL || ghConfigured());
-    $('loginEmailWrap').hidden = fileLogin || !!(CFG.STAFF_EMAIL || (CFG.SERVICE_EMAILS && CFG.SERVICE_EMAILS.length));
-    if (fileLogin) $('loginHint').textContent = 'Введи пароль владельца или сотрудника каталога. После смены паролей используй новый пароль.';
     $('loginError').hidden = true;
     openSheet('loginSheet');
   }
@@ -695,9 +692,10 @@ function bindEvents() {
         // открылся: пароль владельца — полные права, пароль сотрудника — просмотр.
         const role = await unlockAny(password);
         if (role === 'staff') applyStaff(password); else applyServerless(password);
-        $('loginPassword').value = ''; $('loginEmail').value = '';
+        $('loginPassword').value = '';
         closeSheet('loginSheet');
         btn.disabled = false; btn.textContent = 'Войти';
+        keepStorage();          // чтобы браузер не вытер вход сам
         toast(role === 'staff' ? 'Вход сотрудника' : 'Вход выполнен');
         safely('проверка витрины', checkShowcaseFresh)();
         safely('что нового', checkNews)();   // у вошедшего свой каталог — сравниваем заново
@@ -713,8 +711,9 @@ function bindEvents() {
           }
           if (passwordProblem(password)) { $('loginError').textContent = passwordProblem(password); $('loginError').hidden = false; return; }
           applyServerless(password);
-          $('loginPassword').value = ''; $('loginEmail').value = '';
+          $('loginPassword').value = '';
           closeSheet('loginSheet');
+          keepStorage();
           toast('Первый вход. Загрузи Excel — соберём каталог');
           openImportHub();
           return;
@@ -733,20 +732,12 @@ function bindEvents() {
       }
     }
 
-    // к каким аккаунтам подходит этот пароль: явный email из поля,
-    // иначе аккаунт сотрудников + запомненный email админа
-    const typed = $('loginEmail').value.trim();
-    const emails = [];
-    if (!$('loginEmailWrap').hidden && typed) emails.push(typed);
-    else {
-      // служебные аккаунты (кассир, аналитик/зал) — подбираем по паролю
-      const svc = CFG.SERVICE_EMAILS && CFG.SERVICE_EMAILS.length
-        ? CFG.SERVICE_EMAILS.slice() : (CFG.STAFF_EMAIL ? [CFG.STAFF_EMAIL] : []);
-      for (const e of svc) if (!emails.includes(e)) emails.push(e);
-      const savedAdmin = localStorage.getItem(ADMIN_EMAIL_KEY);
-      if (savedAdmin && !emails.includes(savedAdmin)) emails.push(savedAdmin);
-    }
-
+    /* Сюда попадаем, только если каталог не настроен совсем: не указано,
+       откуда брать витрину, и нет ключа публикации. Молчать нельзя — человек
+       смотрел бы на «Входим…» без конца. */
+    btn.disabled = false; btn.textContent = 'Войти';
+    $('loginError').textContent = 'Каталог ещё не настроен: не указано, откуда брать данные. Открой «Настройки этого устройства» и вставь GitHub-ключ.';
+    $('loginError').hidden = false;
   });
 
   $('menuLogout').addEventListener('click', async () => {
