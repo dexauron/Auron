@@ -126,14 +126,30 @@ async function watch(page, ms = 8000) {
       `без интернета каталог открывается в аккаунте (${dead.enteredAt} мс)`);
     chk(!dead.guest.length, 'без интернета гостевой экран тоже не мелькает');
 
-    // ── 3. Связь вернулась — данные подтянулись сами, без пароля ──
+    // ── 3. Владелец правит каталог с другого устройства ──
+    /* Этот телефон открыт и ничего не знает о правке. Проверяем, что при
+       возврате в каталог он подтянет свежее сам — без пароля и перезагрузки.
+       Второе устройство изображает вторая страница: тот же магазин, своя
+       память приложения. */
     net = 'fast';
-    await page.evaluate(async () => {
-      const P = window.WM_PUBLISH, s = P._state();
-      // правим каталог «на сервере» руками владельца с другого устройства
-      s.products[0].name = 'Товар изменён';
-      await P.publishFull(null).catch(() => {});
+    const mine = await page.evaluate(async () => {
+      const P = await import('./js/modules/publish.js');
+      return P.recheckAccess();        // подтверждаем вход и получаем опись
     });
+    chk(mine === 'ok', `связь появилась — вход подтверждён (${mine})`);
+
+    const other = await ctx.newPage();
+    await other.goto('http://localhost:8123/');
+    await other.waitForFunction(() => window.WM_PUBLISH?._state().session, { timeout: 30000 });
+    await other.evaluate(async () => {
+      const P = await import('./js/modules/publish.js');
+      await P.recheckAccess();
+      const S = await import('./js/modules/store.js');
+      S.state.products.find((p) => p.id === 'p0').name = 'Товар изменён';
+      await P.publishFull(null);
+    });
+    await other.close();
+
     const picked = await page.evaluate(async () => {
       const P = await import('./js/modules/publish.js');
       const verdict = await P.recheckAccess(true);
@@ -141,7 +157,7 @@ async function watch(page, ms = 8000) {
       return { verdict, name: S.state.products.find((p) => p.id === 'p0')?.name, warn: S.state.sessionWarning || '' };
     });
     chk(picked.verdict === 'ok' && /изменён/.test(picked.name || ''),
-      `появилась связь — свежие данные пришли сами (${picked.verdict}, «${picked.name}»)`);
+      `правка с другого устройства подхватилась сама (${picked.verdict}, «${picked.name}»)`);
     chk(!picked.warn, 'и предупреждение «показана сохранённая копия» снято');
 
     chk(!errs.length, `нет сбоев JS (${errs.length ? errs.join('; ') : '0'})`);
