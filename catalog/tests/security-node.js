@@ -1,58 +1,6 @@
 // Проверки границы данных на настоящем Web Crypto, без сети и данных магазина.
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
-const { webcrypto, createHash } = require('node:crypto');
 const { legacyCatalogFiles, legacyWholeFile } = require('./fixtures/legacy-crypto.cjs');
-
-const root = path.join(__dirname, '..');
-function harness() {
-  const files = new Map(), blobs = new Map(), disk = new Map();
-  const state = { isAdmin: true, serverless: true, products: [{ id: 'p1', name: 'Товар', code: '001',
-    barcodes: ['00123'], photos: [], stock: 7, supplier_ids: ['s1'] }], groups: [],
-    suppliers: [{ id: 's1', name: 'Поставщик' }], prices: [{ product_id: 'p1', price: 123 }],
-    sales: [], contacts: { s1: { phone: 'fixture' } }, orders: [], requests: [{ private: 'owner-only' }],
-    staffPassword: 'fixture-staff-password', popularity: {} };
-  let n = 0;
-  const local = new Map();
-  const ctx = { state, ui: { secretPw: 'fixture-owner-password' },
-    CFG: { DATA_PATH: 'data', STATIC_URL: 'data/', GITHUB_OWNER: 'fixture', GITHUB_REPO: 'fixture' },
-    crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, btoa, atob, URL, Blob, Response,
-    CompressionStream, DecompressionStream, AbortController, setTimeout, clearTimeout, networkDown: false,
-    console, structuredClone, requestIdleCallback: () => {},
-    $: () => ({ hidden: false, classList: { toggle() {} } }),
-    localStorage: { getItem: k => local.get(k) || null, setItem: (k,v) => local.set(k,v), removeItem: k => local.delete(k) },
-    idbGet: async k => disk.get(k), idbSet: async (k,v) => disk.set(k, structuredClone(v)), idbDelete: async k => disk.delete(k),
-    CACHE_KEY: 'fixture-public', norm: x => String(x || '').toLowerCase(), toast() {}, buildIndex() {}, renderAll() {},
-    tidyMemory() {}, autoDedup() {}, saveCache() {}, byName: (a,b) => a.name.localeCompare(b.name),
-    partName: i => String(i).padStart(2,'0'), digest: async s => createHash('sha256').update(s).digest('hex'),
-    shard: (a,n) => Array.from({length:n}, (_,i) => i===0 ? a : []),
-    pool: async (a,n,fn) => Promise.all(a.map(fn)),
-    fetch: async (url, opts = {}) => {
-      if (ctx.networkDown) throw new TypeError('fixture offline');
-      const response = (s,v) => ({ status:s, ok:s>=200&&s<300, text:async()=>typeof v==='string'?v:JSON.stringify(v), json:async()=>typeof v==='string'?JSON.parse(v):v });
-      const u = String(url);
-      if (u.includes('api.github.com')) {
-        const body = opts.body ? JSON.parse(opts.body) : {};
-        if (u.includes('/git/ref/heads/')) return response(200,{object:{sha:'base'}});
-        if (u.includes('/git/commits/') && !opts.method) return response(200,{tree:{sha:'tree'}});
-        if (u.endsWith('/git/blobs')) { const sha='b'+(++n); blobs.set(sha,body.content); return response(200,{sha}); }
-        if (u.endsWith('/git/trees')) { for(const e of body.tree) e.sha===null?files.delete(e.path):files.set(e.path,blobs.get(e.sha)); return response(200,{sha:'tree'}); }
-        return response(200,{sha:'commit'});
-      }
-      const key = 'data/' + u.split('data/').pop().split('?')[0];
-      return files.has(key) ? response(200,files.get(key)) : response(404,'missing');
-    },
-  };
-  vm.createContext(ctx);
-  for (const file of ['publication-data.js','catalog-crypto.js','publish.js']) {
-    const p = path.join(root,'js/modules',file);
-    if (!fs.existsSync(p)) continue;
-    vm.runInContext(fs.readFileSync(p,'utf8').replace(/^import .*;\s*$/gm,'').replace(/\bexport\s+/g,''),ctx,{filename:file});
-  }
-  vm.runInContext('globalThis.api = { publishFull, unlockAny, unlockSecret, unlockStaff, buildPublicProducts, encryptJSON, decryptJSON, applyServerless, applyStaff, clearSvAuth, rememberSession, restoreSession }; globalThis.cryptoTest = { unwrapCatalogKey, importCatalogKey, keyDecrypt, keyEncrypt };',ctx);
-  return {ctx,files,disk,local,state,api:ctx.api};
-}
+const { harness } = require('./fixtures/publish-harness.cjs');
 
 (async () => {
   let bad = 0, total = 0;
@@ -135,11 +83,22 @@ function harness() {
   check(await h.api.restoreSession()===false && h.local.has('wm_sv_auth') && h.disk.has('wm_auth_device_v2'), 'временная ошибка памяти устройства не удаляет сохранённый вход');
   h.ctx.idbGet=normalGet;
   check(await h.api.restoreSession() && h.state.isAdmin, 'после восстановления памяти вход возвращается без повторного ввода пароля');
+  /* Файл ключей не прочитался (нет его или пришёл обрывок). Раньше это
+     возвращало человека к паролю; с 30.10.2026 решение владельца — «чтобы
+     постоянно с аккаунта не выкидывало, пока сам пользователь не выйдет», —
+     и открывается своя зашифрованная копия. Безопасность от этого не слабеет:
+     ту же копию прежний код отдавал при выключенном интернете, а расшифровать
+     её может только ключ ЭТОГО устройства. Что остаётся запретным и проверяется
+     здесь же: непроверенным входом нельзя ПУБЛИКОВАТЬ — иначе сохранённая
+     копия перезаписала бы настоящий каталог. */
   for(const body of [null,'{fixture interrupted keys']) {
     const original=h.files.get('data/keys.json');
     body===null?h.files.delete('data/keys.json'):h.files.set('data/keys.json',body);
     h.state.isAdmin=false;h.state.session=null;
-    check(await h.api.restoreSession()===false && !h.state.isAdmin && h.local.has('wm_sv_auth') && h.disk.has('wm_auth_device_v2'), 'неподтверждённые данные ключей не дают права и не уничтожают прежний ключ устройства');
+    check(await h.api.restoreSession()===true && h.state.products[0].code==='001' && h.local.has('wm_sv_auth') && h.disk.has('wm_auth_device_v2') && h.state.sessionWarning,
+      'непрочитанный файл ключей не выбрасывает из аккаунта: открывается своя копия, ключ устройства цел');
+    let blocked=false;try{await h.api.publishFull(null)}catch(e){blocked=/сохранённая копия/.test(e.message)}
+    check(blocked, 'при непрочитанном файле ключей публикация запрещена');
     h.files.set('data/keys.json',original);await h.api.restoreSession();
   }
   h.state.staffPassword='fixture-owner-password';
