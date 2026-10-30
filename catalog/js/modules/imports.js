@@ -335,8 +335,21 @@ export function svImportRows(rows) {
 // Публичная витрина: части p/*.json с подписями из index.json. Неизменённые
 // части берутся из кэша; без описи поддерживается прежний products.json.
 // Закрытые данные покупатель из этих файлов не получает.
+/* Любой запрос витрины — со сроком. Без него «очень плохой интернет» выглядит
+ * не как ошибка, а как вечное ожидание: соединение открыто, ответа нет, и
+ * обновление каталога не заканчивается никогда. По сроку мы просто отступаем —
+ * на экране остаётся сохранённая копия, а следующая попытка будет, когда
+ * человек вернётся в каталог или появится связь (keepFresh в app.js). */
+const NET_WAIT = 15000;
+function netFetch(url, opts = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), NET_WAIT);
+  return fetch(url, { ...opts, signal: ctrl.signal })
+    .finally(() => clearTimeout(timer));
+}
+
 async function fetchShowcase(base, onChunk) {
-  const idx = await fetch(base + 'index.json', { cache: 'no-cache' }).catch(() => null);
+  const idx = await netFetch(base + 'index.json', { cache: 'no-cache' }).catch(() => null);
   if (idx && idx.ok) {
     const meta = await idx.json().catch(() => null);
     if (meta && meta.v === 2 && Array.isArray(meta.parts)) {
@@ -351,14 +364,14 @@ async function fetchShowcase(base, onChunk) {
       // 17 тысяч товаров — это несколько мегабайт, и ждать их целиком перед
       // первой картинкой в зале слишком долго.
       await Promise.all(meta.parts.map(async (h, i) => {
-        const r = await fetch(`${base}p/${String(i).padStart(2, '0')}.json?h=${h}`).catch(() => null);
+        const r = await netFetch(`${base}p/${String(i).padStart(2, '0')}.json?h=${h}`).catch(() => null);
         chunks[i] = (r && r.ok) ? await r.json().catch(() => []) : [];
         if (onChunk) onChunk(chunks[i]);
       }));
       return [].concat(...chunks);
     }
   }
-  const pr = await fetch(base + 'products.json', { cache: 'no-cache' });
+  const pr = await netFetch(base + 'products.json', { cache: 'no-cache' });
   return pr.json();
 }
 
@@ -392,8 +405,8 @@ async function refreshStatic({ progressive = false } = {}) {
     // а вошедший сотрудник берёт их из своего зашифрованного каталога.
     const [products, gr, pop] = await Promise.all([
       fetchShowcase(base, show ? (list) => show.add(list) : null),
-      fetch(base + 'groups.json', { cache: 'no-cache' }).catch(() => null),
-      fetch(base + 'popular.json', { cache: 'no-cache' }).catch(() => null),
+      netFetch(base + 'groups.json', { cache: 'no-cache' }).catch(() => null),
+      netFetch(base + 'popular.json', { cache: 'no-cache' }).catch(() => null),
     ]);
     if (!Array.isArray(products)) return false;
     state.groups = (gr && gr.ok) ? await gr.json() : [];
