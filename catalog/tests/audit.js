@@ -41,8 +41,14 @@ const dead = buttons.filter((id) => !BY_FORM.includes(id) && !new RegExp(`['"\`]
 chk(!dead.length, `у каждой кнопки есть обработчик${dead.length ? ': молчат ' + dead.join(', ') : ''}`);
 
 // ── 3. В разметке нет забытых элементов ──
+/* Элемент, на который ссылается aria-describedby, не забыт: его читает вслух
+   экранный диктор. Подсказка под полем пароля живёт именно так — кода, который
+   бы её трогал, нет и не нужно. В одном атрибуте может стоять несколько id. */
+const describedBy = new Set([...html.matchAll(/aria-describedby="([^"]+)"/g)]
+  .flatMap((m) => m[1].trim().split(/\s+/)));
 const orphans = [...htmlIds].filter((id) => !new RegExp(`['"\`#]${id}['"\`\\s]`).test(all)
-  && !html.includes(`data-close="${id}"`) && !html.includes(`for="${id}"`) && !html.includes(`aria-labelledby="${id}"`));
+  && !html.includes(`data-close="${id}"`) && !html.includes(`for="${id}"`)
+  && !html.includes(`aria-labelledby="${id}"`) && !describedBy.has(id));
 chk(!orphans.length, `в разметке нет забытых элементов${orphans.length ? ': ' + orphans.join(', ') : ''}`);
 
 // ── 4. Эмодзи запрещены и в разметке, а не только в коде ──
