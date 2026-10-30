@@ -783,10 +783,16 @@ export async function recheckAccess(force = false) {
   }
   if (!active.mani || force) {
     /* Доступ в силе — дочитываем настоящий каталог, чтобы владелец мог
-       публиковать без перезагрузки страницы. С force это же зовут при возврате
-       в каталог после паузы: куски с неизменившейся подписью приходят из кэша
-       устройства, так что обычно качается только опись и то, что правили. */
+       публиковать без перезагрузки страницы. */
     try {
+      /* При возврате в каталог после паузы сначала смотрим ТОЛЬКО опись: в ней
+         подписи всех кусков. Ничего не изменилось — расходиться незачем,
+         расшифровка двенадцати тысяч товаров на бюджетном телефоне не бесплатна
+         и человек почувствовал бы её как подвисание при каждом возврате. */
+      if (force && active.mani) {
+        const { mani: head } = await readRoleCatalog(active.key, active.role, active.version, true, active.tag);
+        if (head && JSON.stringify(head.sets) === JSON.stringify(active.mani.sets)) return 'ok';
+      }
       const { data, mani } = await readRoleCatalog(active.key, active.role, active.version, false, active.tag);
       _cat = { ...active, keys, mani };
       applySnapshot(data, active.role);
