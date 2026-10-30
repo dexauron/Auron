@@ -294,13 +294,11 @@
         <!-- логотип магазина из настроек; его нет — картинка не показывается -->
         <img class="login-logo" alt="" hidden>
         <h2 class="sheet-title login-title">Вход</h2>
-        <p class="muted login-sub" id="loginHint">Введи пароль своего аккаунта — программа сама
-        определит доступ: кассир, аналитик или администратор</p>
+        <!-- Только пароль: ни email, ни выбора роли. Роль определяется тем, чей
+             пароль ввели. Вход сохраняется, пока человек сам не выйдет. -->
+        <p class="muted login-sub" id="loginHint">Введи пароль владельца или сотрудника каталога.
+        После смены паролей используй новый. Вход останется на этом устройстве, пока сам не выйдешь</p>
         <form id="loginForm">
-          <div id="loginEmailWrap" hidden>
-            <label class="field-label" for="loginEmail">Email администратора <span class="hint">— спрашивается один раз</span></label>
-            <input type="email" id="loginEmail" class="input" autocomplete="username">
-          </div>
           <label class="field-label" for="loginPassword">Пароль</label>
           <input type="password" id="loginPassword" aria-describedby="loginHint loginError" class="input" required autocomplete="current-password">
           <div class="form-error" role="alert" aria-live="polite" id="loginError" hidden></div>
