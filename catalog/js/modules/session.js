@@ -12,7 +12,7 @@
  * Отдельным модулем, а не в app.js: тот и без них на пределе (проверка
  * `modules` держит планку 1200 строк), а эти двое — одна тема. */
 import { state } from './store.js';
-import { safely, toast } from './core.js';
+import { toast } from './core.js';
 import { renderAll } from './render.js';
 import { refresh } from './imports.js';
 import { recheckAccess } from './publish.js';

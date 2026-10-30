@@ -335,19 +335,6 @@ export function svImportRows(rows) {
 // Публичная витрина: части p/*.json с подписями из index.json. Неизменённые
 // части берутся из кэша; без описи поддерживается прежний products.json.
 // Закрытые данные покупатель из этих файлов не получает.
-/* Любой запрос витрины — со сроком. Без него «очень плохой интернет» выглядит
- * не как ошибка, а как вечное ожидание: соединение открыто, ответа нет, и
- * обновление каталога не заканчивается никогда. По сроку мы просто отступаем —
- * на экране остаётся сохранённая копия, а следующая попытка будет, когда
- * человек вернётся в каталог или появится связь (keepFresh в app.js). */
-const NET_WAIT = 15000;
-function netFetch(url, opts = {}) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), NET_WAIT);
-  return fetch(url, { ...opts, signal: ctrl.signal })
-    .finally(() => clearTimeout(timer));
-}
-
 async function fetchShowcase(base, onChunk) {
   const idx = await netFetch(base + 'index.json', { cache: 'no-cache' }).catch(() => null);
   if (idx && idx.ok) {
