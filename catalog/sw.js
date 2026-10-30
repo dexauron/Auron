@@ -1,7 +1,7 @@
 /* Каталог товаров — service worker.
- * Стратегия «сначала сеть»: онлайн всегда свежая версия (версии кэша бампать
- * не нужно), офлайн — последняя сохранённая копия приложения. */
-const CACHE = 'wm-catalog-v136';
+ * Оболочка устанавливается целиком на версию. Изменение HTML/JS/CSS требует
+ * новой версии CACHE: смешивать файлы работающей версии с новым релизом нельзя. */
+const CACHE = 'wm-catalog-v142';
 // Отдельный «вечный» кэш для фото товаров: заполняется по мере просмотра,
 // НЕ очищается при обновлении приложения — фото грузятся один раз и потом
 // показываются мгновенно, работают офлайн и не тратят трафик.
@@ -16,9 +16,9 @@ const DATA = 'wm-data-v1';
  * заходе КАЖДОМУ сотруднику — на мобильном интернете это лишние полминуты
  * ожидания у человека, который просто хотел посмотреть цену. Теперь он
  * сохраняется в офлайн-копию при первом настоящем использовании (см. fetch). */
-const SHELL = ['./', 'index.html', 'styles.css', 'js/modules/app.js',
+const SHELL = ['./', 'index.html', 'styles.css', 'ui.css', 'js/modules/app.js', 'js/modules/catalog-crypto.js', 'js/modules/publication-data.js',
   'js/modules/store.js', 'js/modules/core.js', 'js/modules/icons.js', 'js/modules/catalog.js', 'js/modules/render.js', 'js/modules/device.js', 'js/modules/card.js', 'js/modules/data.js', 'js/modules/brand.js', 'js/modules/parts.js', 'js/modules/publish.js', 'js/modules/competitors.js', 'js/modules/photos.js', 'js/modules/admin.js', 'js/modules/imports.js', 'js/modules/scanner.js', 'js/modules/orders.js', 'js/modules/compare.js', 'js/modules/restock.js', 'js/modules/work.js', 'js/modules/guest.js', 'js/modules/shopping.js', 'js/modules/news.js', 'js/modules/mascot.js', 'js/modules/margin.js', 'js/modules/reviews.js', 'js/modules/whatsapp.js', 'js/modules/pricerise.js', 'js/modules/onec.js', 'js/modules/requests.js', 'js/xlsx-worker.js', 'js/config.js',
-  'manifest.webmanifest',
+  'js/boot.js', 'recover.html', 'manifest.webmanifest',
   /* Картинки магазина — логотип и талисман — здесь НЕ перечислены нарочно:
      их имена задаёт сам магазин в js/config.js, и движок не должен их знать
      (иначе каталог нельзя переделать под другой магазин одной правкой
@@ -27,14 +27,16 @@ const SHELL = ['./', 'index.html', 'styles.css', 'js/modules/app.js',
   'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE)
+    .then((c) => c.addAll(SHELL.map((file) => new Request(file, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
       // чистим старые версии оболочки, но кэш фото и кусков каталога не трогаем
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== PHOTOS && k !== DATA).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('wm-catalog-v') && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -57,8 +59,8 @@ function isPhoto(url, req) {
   return url.pathname.includes('/storage/v1/object/') || req.destination === 'image';
 }
 
-// кусок каталога? В адресе есть подпись содержимого (?h=…), значит по этому
-// адресу лежит ровно одно неизменное содержимое — можно смело брать из кэша.
+// Кусок каталога? h — подпись содержимого, k — поколение ключа для шифртекста.
+// Пара h+k меняет адрес и при правке данных, и при перешифровании тех же данных.
 function isDataPart(url) {
   return url.searchParams.has('h') && /(\/p\/\d+\.json|\.enc)$/.test(url.pathname);
 }
@@ -106,23 +108,22 @@ self.addEventListener('fetch', (e) => {
   const isShell = e.request.mode === 'navigate'
     || /\.(html|js|css|webmanifest)$/i.test(url.pathname);
 
-  /* Оболочка приложения — «сохранённое сразу, свежее следом».
-   * Было «сначала сеть»: каждый заход ждал ответа сервера по всем двум десяткам
-   * файлов, и на слабом мобильном интернете каталог открывался долго, хотя всё
-   * уже лежало на телефоне. Теперь показываем сохранённое мгновенно, а свежую
-   * версию тихо докачиваем в фоне (мимо обычного кэша браузера, иначе GitHub
-   * Pages отдаёт вчерашнее). Когда новая версия готова, service worker сам
-   * перехватывает управление и страница один раз перезагружается — человек
-   * получает обновление, ничего для этого не делая. */
+  /* Оболочка неизменна до установки следующего worker. Фоновая перезапись
+   * отдельного HTML при старом JS ломала запуск (например, после удаления
+   * кнопки). Параметры ссылки не создают вторую копию того же файла. */
   if (isShell) {
     e.respondWith((async () => {
       const cache = await caches.open(CACHE);
-      const hit = await cache.match(e.request, { ignoreSearch: true });
-      const fresh = fetch(new Request(e.request, { cache: 'reload' }))
-        .then((resp) => { if (resp.ok) cache.put(e.request, resp.clone()); return resp; })
-        .catch(() => null);
-      if (hit) { e.waitUntil(fresh); return hit; }
-      return (await fresh) || Response.error();
+      const key = new URL(url);
+      key.search = '';
+      if (e.request.mode === 'navigate' && !key.pathname.endsWith('/recover.html')) key.pathname = new URL('index.html', self.registration.scope).pathname;
+      const hit = await cache.match(key.href);
+      if (hit) return hit;
+      // Файл вне установленной оболочки (например, разборщик Excel) можно
+      // сохранить при первом использовании. Отказ кэша не ломает ответ сети.
+      const fresh = await fetch(new Request(e.request, { cache: 'reload' }));
+      if (fresh.ok) await cache.put(key.href, fresh.clone()).catch(() => {});
+      return fresh;
     })());
     return;
   }

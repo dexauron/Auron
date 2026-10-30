@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { chromium, runner } = require('./helpers');
+const { legacyCatalogFiles, legacyWholeFile } = require('./fixtures/legacy-crypto.cjs');
 
 const N = 400;                       // товаров в проверочном каталоге
 const products = Array.from({ length: N }, (_, i) => ({
@@ -88,28 +89,28 @@ const DP = (fs.readFileSync(path.join(__dirname, '..', 'js', 'config.js'), 'utf8
     const P = window.WM_PUBLISH, s = P._state();
     s.products = x.products; s.prices = x.prices; s.sales = x.sales;
     s.groups = [{ id: 'g1', name: 'Товары' }]; s.suppliers = [{ id: 's1', name: 'Поставщик' }];
-    s.staffPassword = 'staffpw';
-    P.applyServerless('ownerpw');
+    s.staffPassword = 'staff-fixture-password';
+    P.applyServerless('owner-fixture-password');
   }, d);
   await load({ products, prices, sales });
 
   // ── 1. Первая публикация: уезжает весь каталог ──
-  const first = await page.evaluate(() => window.WM_PUBLISH.publishFull('ownerpw'));
+  const first = await page.evaluate(() => window.WM_PUBLISH.publishFull('owner-fixture-password'));
   const firstPaths = gh.commits[0] || [];
   chk(first && first.sha, `первая публикация прошла (файлов: ${firstPaths.length})`);
   chk(firstPaths.some((p) => /\/p\/00\.json$/.test(p)) && firstPaths.some((p) => /index\.json$/.test(p)),
     'витрина легла кусками и с описью');
   chk(firstPaths.some((p) => /sec\/products-00\.enc$/.test(p)) && firstPaths.some((p) => /catalog\.enc$/.test(p)),
     'закрытый каталог тоже лёг кусками и с описью');
-  chk(firstPaths.some((p) => /keys\.json$/.test(p)) && !firstPaths.some((p) => /sec-staff/.test(p)),
-    'каталог ОДИН на всех: конвертики с ключом есть, второй копии для сотрудника нет');
+  chk(firstPaths.some((p) => /keys\.json$/.test(p)) && firstPaths.some((p) => /sec-staff/.test(p)),
+    'каталоги ролей раздельные: у сотрудника своя зашифрованная копия');
 
   // ── 2. Правка ОДНОГО товара: уезжают единицы файлов ──
   await page.evaluate(() => {
     const s = window.WM_PUBLISH._state();
     s.products.find((p) => p.id === 'p7').retail_price = 999;
   });
-  await page.evaluate(() => window.WM_PUBLISH.publishFull('ownerpw'));
+  await page.evaluate(() => window.WM_PUBLISH.publishFull('owner-fixture-password'));
   const second = gh.commits[1] || [];
   console.log('--- второй раз уехало ---');
   second.forEach((p) => console.log('  ' + p));
@@ -129,7 +130,7 @@ const DP = (fs.readFileSync(path.join(__dirname, '..', 'js', 'config.js'), 'utf8
   const back = await page.evaluate(async () => {
     const P = window.WM_PUBLISH, s = P._state();
     s.products = []; s.prices = []; s.sales = [];
-    await P.unlockSecret('ownerpw');
+    await P.unlockSecret('owner-fixture-password');
     return {
       products: s.products.length, prices: s.prices.length, sales: s.sales.length,
       changed: (s.products.find((p) => p.id === 'p7') || {}).retail_price,
@@ -139,13 +140,13 @@ const DP = (fs.readFileSync(path.join(__dirname, '..', 'js', 'config.js'), 'utf8
   chk(back.products === N && back.prices === N && back.sales === 100,
     `каталог собрался из кусков полностью (товаров ${back.products}, цен ${back.prices}, продаж ${back.sales})`);
   chk(back.changed === 999, `правка на месте (цена ${back.changed})`);
-  chk(back.groups === 1 && back.staffPw === 'staffpw', 'мелочь из описи (группы, пароль сотрудника) на месте');
+  chk(back.groups === 1 && back.staffPw === 'staff-fixture-password', 'мелочь из описи (группы, пароль сотрудника) на месте');
 
   // ── 4. Вход сотрудника — по своему паролю и своим кускам ──
   const st = await page.evaluate(async () => {
     const P = window.WM_PUBLISH, s = P._state();
     s.products = []; s.prices = [];
-    await P.unlockStaff('staffpw');
+    await P.unlockStaff('staff-fixture-password');
     return { products: s.products.length, prices: s.prices.length };
   });
   chk(st.products === N && st.prices === N, `сотрудник видит весь каталог (${st.products} товаров)`);
@@ -170,15 +171,15 @@ const DP = (fs.readFileSync(path.join(__dirname, '..', 'js', 'config.js'), 'utf8
   await page.evaluate(async () => {
     const P = window.WM_PUBLISH, s = P._state();
     s.session = null; s.serverless = false;
-    await P.unlockSecret('ownerpw');            // войти владельцем, ключ каталога в памяти
+    await P.unlockSecret('owner-fixture-password');            // войти владельцем, ключ каталога в памяти
     s.staffPassword = 'другойпароль';
-    await P.publishFull('ownerpw');
+    await P.publishFull('owner-fixture-password');
   });
   const rekey = gh.commits[gh.commits.length - 1];
-  chk(rekey.filter((p) => /sec\/.*\.enc$/.test(p)).length >= 40 && rekey.some((p) => /keys\.json$/.test(p)),
-    `после смены пароля сотрудника каталог перешифрован целиком (${rekey.filter((p) => /sec\//.test(p)).length} кусков)`);
+  chk(rekey.filter((p) => /sec-staff\/.*\.enc$/.test(p)).length >= 40 && rekey.some((p) => /keys\.json$/.test(p)),
+    `после смены пароля сотрудника его набор перешифрован целиком (${rekey.filter((p) => /sec-staff\//.test(p)).length} кусков)`);
   const oldStaff = await page.evaluate(async () => {
-    try { await window.WM_PUBLISH.unlockStaff('staffpw'); return 'открылось'; } catch (e) { return 'отказ'; }
+    try { await window.WM_PUBLISH.unlockStaff('staff-fixture-password'); return 'открылось'; } catch (e) { return 'отказ'; }
   });
   chk(oldStaff === 'отказ', 'прежний пароль сотрудника больше не открывает каталог');
   const newStaff = await page.evaluate(async () => {
@@ -193,26 +194,42 @@ const DP = (fs.readFileSync(path.join(__dirname, '..', 'js', 'config.js'), 'utf8
   // репозитория, и знавший прежний пароль открыл бы каталог и дальше.
   await page.evaluate(async () => {
     const P = window.WM_PUBLISH;
-    await P.unlockSecret('ownerpw');
-    await P.publishFull('новыйпароль', { rotate: true });
+    await P.unlockSecret('owner-fixture-password');
+    await P.publishFull('новый-длинный-пароль', { rotate: true });
   });
   const afterRotate = gh.commits[gh.commits.length - 1];
   chk(afterRotate.filter((p) => /sec\/.*\.enc$/.test(p)).length >= 40 && afterRotate.some((p) => /keys\.json$/.test(p)),
     `смена пароля владельца перешифровала каталог целиком (${afterRotate.filter((p) => /sec\//.test(p)).length} кусков)`);
   const oldOwner = await page.evaluate(async () => {
-    try { await window.WM_PUBLISH.unlockSecret('ownerpw'); return 'открылось'; } catch (e) { return 'отказ'; }
+    try { await window.WM_PUBLISH.unlockSecret('owner-fixture-password'); return 'открылось'; } catch (e) { return 'отказ'; }
   });
   chk(oldOwner === 'отказ', 'прежний пароль владельца больше не открывает каталог');
   const newOwner = await page.evaluate(async () => {
     const P = window.WM_PUBLISH, s = P._state(); s.products = [];
-    await P.unlockSecret('новыйпароль');
+    await P.unlockSecret('новый-длинный-пароль');
     return s.products.length;
   });
   chk(newOwner === N, `новый пароль владельца открывает каталог (${newOwner} товаров)`);
 
+  // Пароль из формы передаётся точно, включая намеренные крайние пробелы.
+  const spacedPassword = '  пароль-для-проверки-пробелов  ';
+  await page.evaluate(() => window.WM_PUBLISH.applyServerless(null));
+  await page.click('#adminBtn');
+  await page.click('#menuOwnerPass');
+  await page.fill('#ownerPassNew', spacedPassword);
+  await page.fill('#ownerPassAgain', spacedPassword);
+  await page.click('#ownerPassSubmit');
+  await page.waitForFunction(() => document.getElementById('ownerPassSheet').hidden, { timeout: 30000 });
+  const exactPassword = await page.evaluate(async (pw) => {
+    const P = window.WM_PUBLISH;
+    await P.unlockSecret(pw);
+    try { await P.unlockSecret(pw.trim()); return false; } catch (e) { return true; }
+  }, spacedPassword);
+  chk(exactPassword, 'форма сохраняет пароль без обрезания пробелов; обрезанный вариант не подходит');
+
   // ── 8. В открытом файле ключей нет ни пароля, ни данных ──
   const keysFile = gh.fs.get(`${DP}/keys.json`) || '';
-  chk(!/ownerpw|staffpw|другойпароль|новыйпароль/.test(keysFile) && keysFile.length < 2000,
+  chk(!/owner-fixture-password|staff-fixture-password|другойпароль|новый-длинный-пароль/.test(keysFile) && keysFile.length < 2000,
     `конвертики с ключом ничего не выдают (${keysFile.length} байт, паролей внутри нет)`);
 
   /* ── 8a. Витрина помечена версией приложения ──
@@ -248,15 +265,91 @@ const DP = (fs.readFileSync(path.join(__dirname, '..', 'js', 'config.js'), 'utf8
     `про старую витрину владельцу сказано словами (${stale.text.slice(0, 40)}…)`);
   gh.fs.set(`${DP}/index.json`, idxRaw);
 
-  // ── 9. Старый цельный файл всё ещё читается ──
-  [`${DP}/keys.json`, `${DP}/catalog.enc`].forEach((f) => gh.fs.delete(f));
-  const legacy = await page.evaluate(async () => {
-    const P = window.WM_PUBLISH;
-    const old = await P.encryptJSON({ v: 1, products: [{ id: 'x1', name: 'Старый товар' }], groups: [] }, 'oldpw');
-    window.__legacy = old;
-    return old.length > 0;
+  // ── 8в. Настоящий IndexedDB: ключ переживает перезагрузку без хранения пароля ──
+  await page.evaluate(() => window.WM_PUBLISH.applyServerless(null));
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('wm_sv_auth') || 'null')?.v === 2);
+  const remembered = await page.evaluate(() => localStorage.getItem('wm_sv_auth'));
+  chk(!/pw|пароль|password/.test(remembered), 'в указателе сохранённого входа нет пароля');
+  await page.goto('http://localhost:8123/?do=restock');
+  await page.waitForFunction(() => window.WM_PUBLISH?._state().session && window.WM_PUBLISH._state().isAdmin);
+  chk(await page.evaluate(() => !document.getElementById('restockSheet').hidden), 'ярлык открывает рабочий экран после проверки сохранённого ключа');
+  chk(await page.evaluate(() => window.WM_PUBLISH._state().prices.length === 400), 'после перезагрузки закрытые данные восстановлены через CryptoKey в IndexedDB');
+  const offlineRaw = (r) => r.abort('internetdisconnected');
+  await ctx.route('https://raw.githubusercontent.com/**', offlineRaw);
+  await page.reload();
+  await page.waitForFunction(() => window.WM_PUBLISH?._state().session && window.WM_PUBLISH._state().isAdmin);
+  chk(await page.evaluate(() => window.WM_PUBLISH._state().prices.length === 400), 'без сети владелец читает свою зашифрованную офлайн-копию');
+  await ctx.unroute('https://raw.githubusercontent.com/**', offlineRaw);
+  const beforeRevoke = gh.fs.get(`${DP}/keys.json`);
+  const revokedKeys = JSON.parse(beforeRevoke); revokedKeys.owner.data = 'AAAA' + revokedKeys.owner.data.slice(4);
+  gh.fs.set(`${DP}/keys.json`, JSON.stringify(revokedKeys));
+  await page.reload();
+  await page.waitForFunction(() => window.WM_PUBLISH && !localStorage.getItem('wm_sv_auth'));
+  chk(await page.evaluate(() => !window.WM_PUBLISH._state().session && !window.WM_PUBLISH._state().isAdmin), 'изменённый ключ отзывает сохранённый вход при наличии сети');
+  gh.fs.set(`${DP}/keys.json`, beforeRevoke);
+
+  const blockedInline = await page.evaluate(() => {
+    const s = document.createElement('script'); s.textContent = 'window.fixtureInlineExecuted = true'; document.head.append(s);
+    return !window.fixtureInlineExecuted;
   });
-  gh.fs.set(`${DP}/secret-catalog.enc`, await page.evaluate(() => window.__legacy));
+  chk(blockedInline, 'CSP блокирует внедрённый inline-скрипт');
+
+  // ── 9. Реальный прежний v3: вход через форму и переход без потери данных ──
+  // Фикстура повторяет старый writer, а не новый encryptJSON/keyEncrypt:
+  // у частей нет v/alg, сжатие помечено именно строкой 'gzip'.
+  const oldSnapshot = { v: 1, products: products.slice(0, 4), prices: prices.slice(0, 4), sales: sales.slice(0, 4),
+    groups: [{ id: 'g1', name: 'Товары' }], suppliers: [{ id: 's1', name: 'Поставщик' }],
+    requests: [{ id: 'owner-request' }], contacts: {} };
+  const ghV3 = fakeGithub();
+  for (const [name, body] of await legacyCatalogFiles(oldSnapshot, 'legacy-owner-fixture', 'legacy-staff-fixture', { prefix: DP })) ghV3.fs.set(name, body);
+  const legacyCtx = await b.newContext({ viewport: { width: 390, height: 900 }, serviceWorkers: 'block' });
+  await legacyCtx.addInitScript(() => localStorage.setItem('wm_gh_token', 'tok'));
+  await ghV3.route(legacyCtx);
+  const oldPage = await legacyCtx.newPage();
+  oldPage.on('pageerror', (e) => errs.push(e.message));
+  await oldPage.goto('http://localhost:8123/');
+  await oldPage.waitForFunction(() => window.WM_PUBLISH);
+  await oldPage.click('#adminBtn');
+  await oldPage.fill('#loginPassword', 'legacy-staff-fixture');
+  await oldPage.click('#loginSubmit');
+  await oldPage.waitForFunction(() => !document.getElementById('loginError').hidden);
+  chk(await oldPage.evaluate(() => /Владелец должен/.test(document.getElementById('loginError').textContent)
+    && !window.WM_PUBLISH._state().session), 'старому сотруднику объяснён переход, права владельца не выданы');
+  await oldPage.fill('#loginPassword', 'legacy-owner-fixture');
+  await oldPage.click('#loginSubmit');
+  await oldPage.waitForFunction(() => window.WM_PUBLISH._state().isAdmin || !document.getElementById('loginError').hidden);
+  const oldOwnerEntered = await oldPage.evaluate(() => window.WM_PUBLISH._state().isAdmin);
+  chk(oldOwnerEntered, 'прежний пароль владельца открывает настоящий v3 gzip через форму входа');
+  if (oldOwnerEntered) {
+    const before = await oldPage.evaluate(() => {
+      const s = window.WM_PUBLISH._state();
+      return [s.products.length, s.suppliers.length, s.prices.length, s.products.reduce((n,p) => n + p.barcodes.length, 0), s.requests.length];
+    });
+    chk(JSON.stringify(before) === '[4,1,4,4,1]', 'после старого входа сохранены товары, поставщики, цены, штрихкоды и заявки');
+    await oldPage.click('#adminBtn');
+    await oldPage.click('#menuOwnerPass');
+    await oldPage.fill('#ownerPassNew', 'migrated-owner-fixture');
+    await oldPage.fill('#ownerPassAgain', 'migrated-owner-fixture');
+    await oldPage.fill('#ownerPassStaff', 'migrated-staff-fixture');
+    await oldPage.click('#ownerPassSubmit');
+    await oldPage.waitForFunction(() => document.getElementById('ownerPassSheet').hidden, { timeout: 30000 });
+    chk(JSON.parse(ghV3.fs.get(`${DP}/keys.json`)).v === 4, 'форма переводит настоящий v3 в раздельный v4');
+    const after = await oldPage.evaluate(async () => {
+      const P = window.WM_PUBLISH; await P.unlockSecret('migrated-owner-fixture');
+      const s = P._state();
+      const owner = [s.products.length, s.suppliers.length, s.prices.length, s.products.reduce((n,p) => n + p.barcodes.length, 0), s.requests.length];
+      await P.unlockStaff('migrated-staff-fixture');
+      return { owner, staff: [s.products.length, s.prices.length, s.requests.length] };
+    });
+    chk(JSON.stringify(after.owner) === JSON.stringify(before) && JSON.stringify(after.staff) === '[4,4,0]',
+      'оба новых пароля читают свои наборы без потерь и без заявок владельца у сотрудника');
+  }
+  await legacyCtx.close();
+
+  // ── 10. Старый цельный gzip-файл с прежним PBKDF2 всё ещё читается ──
+  [`${DP}/keys.json`, `${DP}/catalog.enc`, `${DP}/staff-catalog.enc`].forEach((f) => gh.fs.delete(f));
+  const legacy = await legacyWholeFile({ v: 1, products: [{ id: 'x1', name: 'Старый товар' }], groups: [] }, 'oldpw');
+  gh.fs.set(`${DP}/secret-catalog.enc`, legacy);
   const readOld = await page.evaluate(async () => {
     const P = window.WM_PUBLISH, s = P._state();
     s.products = [];

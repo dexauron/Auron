@@ -240,7 +240,7 @@ export function renderGrid() {
   const cards = shown.map((p) => {
     const photo = (p.photos || []).find((u) => u && String(u).trim());
     const img = photo
-      ? `<img src="${esc(photo)}" alt="" loading="lazy" onerror="wmImgFail(this)">`
+      ? `<img src="${esc(photo)}" alt="" loading="lazy" data-photo-fallback>`
       : ic('box', 'ic-ph');
     const photoCls = photo ? 'card-photo' : 'card-photo no-photo';
     // минимализм: на плитке только код и, если весовой, значок — остальное в карточке
@@ -430,9 +430,6 @@ function syncControls() {
   if (ui.applyGuestMode) ui.applyGuestMode();   // класс «покупатель» на странице
   if (ui.renderShopBar) ui.renderShopBar();     // полоска «сколько выйдет»
   document.querySelectorAll('.purchase-only').forEach((el) => { el.hidden = !state.canPurchase; });
-  /* Только владельцу: то, что уходит в общий каталог. Сотрудник туда не пишет,
-     и обещать ему сохранение нельзя — список пропал бы при перезагрузке. */
-  document.querySelectorAll('.admin-only').forEach((el) => { el.hidden = !state.isAdmin; });
   const sVal = $('filterSuppliersVal');
   if (sVal) sVal.textContent = state.selSuppliers.length ? `Выбрано: ${state.selSuppliers.length}` : 'Все';
   // значок на вкладке «Подбор»: видно, что фильтр включён, не открывая её
@@ -508,6 +505,8 @@ export function renderAll() {
   renderPickLists();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
+  if (state.sessionWarning) { $('offlineBanner').textContent = state.sessionWarning; $('offlineBanner').hidden = false; }
+  window.dispatchEvent(new Event('wm:ready'));
 }
 
 // включён ли хоть один настоящий фильтр — поиск словом за фильтр не считаем
@@ -682,7 +681,7 @@ function renderMyFrequent() {
       const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
       const code = x.code ? `<span class="similar-code">${esc(x.code)}</span>` : '';
       return `<button class="similar-card" data-similar="${esc(x.id)}">
-        <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
+        <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" data-photo-fallback>` : ic('box', 'ic-ph')}</span>
         <span class="similar-name">${esc(x.name)}</span>${code}${price}</button>`;
     }).join('') + '</div>';
 }
@@ -701,7 +700,7 @@ export function renderNewProducts() {
       const ph = (x.photos || []).find((u) => u && String(u).trim());
       const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
       return `<button class="similar-card" data-similar="${esc(x.id)}">
-        <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
+        <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" data-photo-fallback>` : ic('box', 'ic-ph')}</span>
         <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
     }).join('') + '</div>';
 }
@@ -819,6 +818,10 @@ export function choosePick(kind) {
 
 // «Недавно смотрели» — горизонтальная лента на главной, когда нет поиска и фильтров
 
+function themeChrome() {
+  const bg = window.getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.content = bg;
+}
 export function applyTheme(t) {
   // t: 'dark' | 'light' | null (авто — по системе)
   const root = document.documentElement;
@@ -826,8 +829,17 @@ export function applyTheme(t) {
   else root.removeAttribute('data-theme');
   const icon = $('themeIcon');
   if (icon) icon.innerHTML = ic(t === 'dark' ? 'sun' : t === 'light' ? 'moon' : 'auto');
+  themeChrome();
 }
-export function initTheme() { try { applyTheme(localStorage.getItem(THEME_KEY)); } catch (e) { /* */ } }
+export function initTheme() {
+  try { applyTheme(localStorage.getItem(THEME_KEY)); } catch (e) { /* */ }
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+  const onChange = () => {
+    if (!document.documentElement.hasAttribute('data-theme')) themeChrome();
+  };
+  if (typeof media.addEventListener === 'function') media.addEventListener('change', onChange);
+  else if (typeof media.addListener === 'function') media.addListener(onChange);
+}
 export function toggleTheme() {
   let cur; try { cur = localStorage.getItem(THEME_KEY); } catch (e) { cur = null; }
   // цикл: авто → тёмная → светлая → авто

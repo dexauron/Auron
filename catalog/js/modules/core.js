@@ -12,7 +12,7 @@ export const esc = (s) => String(s ?? '')
 
 // Фото не загрузилось (битая ссылка) → убираем «сломанную картинку» браузера и
 // показываем ту же заглушку 📦, что у товаров без фото. Соседние фото не трогаем.
-window.wmImgFail = function (img) {
+function imageFailed(img) {
   try {
     const box = img.parentElement;
     img.remove();
@@ -20,8 +20,14 @@ window.wmImgFail = function (img) {
       box.classList.add('no-photo');
       if (!box.textContent.trim()) box.insertAdjacentHTML('beforeend', ic('box', 'ic-ph'));
     }
-  } catch (e) { /* ignore */ }
-};
+  } catch (e) { /* элемент уже мог быть удалён */ }
+}
+// error у картинки не всплывает: один обработчик в фазе захвата обслуживает
+// и плитки, и динамически добавленные галереи без inline JavaScript.
+document.addEventListener('error', (event) => {
+  const img = event.target;
+  if (img && img.tagName === 'IMG' && img.hasAttribute('data-photo-fallback')) imageFailed(img);
+}, true);
 
 /* Сравнение строк по-русски. String.localeCompare каждый раз заново поднимает
  * правила языка, и на 17 000 товаров сортировка занимала на телефоне полсекунды.

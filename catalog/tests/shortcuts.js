@@ -1,6 +1,6 @@
 // Быстрые действия с ярлыка приложения: долгое нажатие на значок на главном
 // экране телефона → «Сканер» и «Закончилось».
-const { chromium, newPage, runner } = require('./helpers');
+const { chromium, newPage, asOwner, runner } = require('./helpers');
 const fs = require('fs');
 const path = require('path');
 
@@ -35,15 +35,15 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     await page.context().close();
   }
 
-  // 3. С запомненным входом открывается сам список
+  // 3. После входа маршрутизатор открывает действие. Само восстановление
+  // ключа вместе с URL проверяется в publish-parts.js, без доверия к роли JSON.
   for (const [what, sheet] of [['restock', 'restockSheet']]) {
     const { page } = await newPage(b, { products, groups });
-    await page.evaluate(() => localStorage.setItem('wm_sv_auth', JSON.stringify({ pw: 'pw', role: 'owner' })));
-    await page.goto(`http://localhost:8123/?do=${what}`, { waitUntil: 'load' });
-    await page.waitForFunction(() => window.WM_PUBLISH, { timeout: 30000 });
-    await page.waitForTimeout(1500);
+    await asOwner(page);
+    await page.evaluate((w) => window.WM_PUBLISH._ui().runQuickAction(w), what);
+    await page.waitForTimeout(800);
     const open = await page.evaluate((id) => !document.getElementById(id).hidden, sheet);
-    chk(open, `ярлык «${what}» открывает свой экран сразу`);
+    chk(open, `после входа действие «${what}» открывает свой экран`);
     await page.context().close();
   }
 
