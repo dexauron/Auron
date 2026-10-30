@@ -31,7 +31,8 @@ const all = () => (state.requests = state.requests || []);
 const byId = (id) => all().find((r) => r.id === id) || null;
 
 // сколько заявок ждёт приёмки — для значка во вкладке «Работа»
-export const requestsWaiting = () => all().filter((r) => !r.takenAt).length;
+// Считаем только владельцу: у остальных заявок нет и быть не может
+export const requestsWaiting = () => (state.isAdmin ? all().filter((r) => !r.takenAt).length : 0);
 
 const sum = (items) => items.reduce((s, x) => s + (Number(x.price) || 0) * (Number(x.qty) || 0), 0);
 const lines = (items) => items.filter((x) => Number(x.qty) > 0).length;
