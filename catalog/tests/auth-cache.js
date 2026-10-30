@@ -105,8 +105,9 @@ process.on('exit', (code) => { if (!completed && code === 0) { console.error('FA
     chk(await page.evaluate(() => !document.getElementById('loginEmailWrap')
       && !document.querySelector('#loginSheet input[type="email"]')
       && document.querySelectorAll('#loginSheet input').length === 1
-      && /новый пароль/.test(document.getElementById('loginHint').textContent)),
-    'в окне входа одно поле — пароль, и объяснение про смену пароля');
+      && /смены паролей/.test(document.getElementById('loginHint').textContent)
+      && /пока сам не выйдешь/.test(document.getElementById('loginHint').textContent)),
+    'в окне входа одно поле — пароль; сказано про смену пароля и про то, что вход сохранится');
     await page.fill('#loginPassword', 'old-owner-fixture'); await page.click('#loginSubmit');
     await page.waitForFunction(() => !document.getElementById('loginError').hidden);
     chk(await page.evaluate(() => /Пароль каталога не подошёл/.test(document.getElementById('loginError').textContent)
