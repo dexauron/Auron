@@ -8,7 +8,7 @@ import { addRecentQuery, choosePick, clearAllFilters, closeLightbox, deviceId, i
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
-import { restoreSession, rememberSession, passwordProblem, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
+import { restoreSession, rememberSession, recheckAccess, keepStorage, passwordProblem, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, findProductPhoto, isOwner, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
@@ -1101,6 +1101,7 @@ async function init() {
   // Отозванный пароль не превращаем в «нет сети».
   await restoreSession();
   ui.persistPrivate = rememberSession;
+  watchAccess();          // вошли из сохранённой копии — доберём данные, когда появится связь
 
   await safely('обновление каталога', refresh)();
   warmSearchIndex();   // указатель поиска соберётся в свободную минуту
@@ -1109,6 +1110,38 @@ async function init() {
   openFromHash(); // если открыли по ссылке на товар — показываем его
   shopFromHash(); // а если прислали ссылку со списком покупок — собираем список
   runQuickActionFromUrl();
+}
+
+/* Вошли из сохранённой копии (интернета не было) — не оставляем человека с
+ * предупреждением на экране и не просим пароль заново. Сами ждём связи и
+ * дочитываем каталог; а если за это время владелец сменил пароль, вход честно
+ * снимается — иначе отзыв доступа ничего бы не значил.
+ *
+ * Проверяем по событию «появился интернет» и редкими попытками (полминуты,
+ * потом всё реже, максимум шесть раз): телефон в подсобке может висеть на
+ * мёртвом Wi-Fi, где событие не приходит вовсе. */
+function watchAccess() {
+  if (!state.session || !state.catalogNeedsRefresh) return;
+  let tries = 0, timer = 0, busy = false;
+  const stop = () => { clearTimeout(timer); window.removeEventListener('online', run); };
+  const run = async () => {
+    if (busy || !state.session) return;
+    busy = true;
+    let verdict = 'later';
+    try { verdict = await recheckAccess(); } catch (e) { verdict = 'later'; }
+    busy = false;
+    if (verdict === 'revoked') {
+      stop();
+      toast('Пароль каталога сменили — войди заново');
+      setTimeout(() => location.reload(), 2500);
+      return;
+    }
+    if (verdict === 'ok' && !state.catalogNeedsRefresh) { stop(); renderAll(); return; }
+    if (++tries >= 6) { stop(); return; }
+    timer = setTimeout(run, 30000 * tries);
+  };
+  window.addEventListener('online', run);
+  timer = setTimeout(run, 30000);
 }
 
 /* Ярлык на главном экране телефона открывает каталог с ?do=… Разбираем это
