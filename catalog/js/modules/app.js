@@ -8,7 +8,7 @@ import { addRecentQuery, choosePick, clearAllFilters, closeLightbox, deviceId, i
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
-import { restoreSession, rememberSession, recheckAccess, keepStorage, passwordProblem, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
+import { restoreSession, restoreFast, rememberSession, recheckAccess, keepStorage, passwordProblem, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, findProductPhoto, isOwner, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
@@ -1094,14 +1094,22 @@ async function init() {
     return;
   }
 
-  // мгновенно показываем сохранённый каталог, затем тихо обновляем
-  if (await loadCache()) renderAll();
+  /* Порядок важен. Сначала — вход из копии на устройстве, без сети: иначе
+     вошедший человек видит сперва гостевой экран с кнопкой «Войти», а свой
+     аккаунт — только когда ответит интернет (при медленной связи это были
+     секунды). Потом рисуем, и только потом идём в сеть. */
+  const fast = await restoreFast();
+  // Публичный кэш витрины нужен лишь тому, кто НЕ вошёл: у вошедшего свои
+  // данные полнее, и затирать их витриной нельзя.
+  if (fast) renderAll();
+  else if (await loadCache()) renderAll();
 
-  // Сначала проверяем ключ и актуальность доступа, затем поднимаем роль.
+  // Копии на устройстве не было (первый вход здесь) — прежний путь через сеть.
   // Отозванный пароль не превращаем в «нет сети».
-  await restoreSession();
+  if (!fast) await restoreSession();
   ui.persistPrivate = rememberSession;
-  watchAccess();          // вошли из сохранённой копии — доберём данные, когда появится связь
+  // Вошли из копии — проверяем отзыв и дочитываем свежий каталог сразу, в фоне.
+  watchAccess({ now: fast });
 
   await safely('обновление каталога', refresh)();
   warmSearchIndex();   // указатель поиска соберётся в свободную минуту
@@ -1120,7 +1128,7 @@ async function init() {
  * Проверяем по событию «появился интернет» и редкими попытками (полминуты,
  * потом всё реже, максимум шесть раз): телефон в подсобке может висеть на
  * мёртвом Wi-Fi, где событие не приходит вовсе. */
-function watchAccess() {
+function watchAccess({ now = false } = {}) {
   if (!state.session || !state.catalogNeedsRefresh) return;
   let tries = 0, timer = 0, busy = false;
   const stop = () => { clearTimeout(timer); window.removeEventListener('online', run); };
@@ -1136,12 +1144,18 @@ function watchAccess() {
       setTimeout(() => location.reload(), 2500);
       return;
     }
-    if (verdict === 'ok' && !state.catalogNeedsRefresh) { stop(); renderAll(); return; }
+    if (verdict === 'ok' && !state.catalogNeedsRefresh) { stop(); state.sessionWarning = ''; renderAll(); return; }
+    /* Связи нет. Теперь — и только теперь — говорим человеку, что данные
+       сохранённые: на обычном запуске такую надпись показывать незачем. */
+    if (!state.sessionWarning) {
+      state.sessionWarning = 'Показана сохранённая копия: интернет пока не отдал свежие данные. Вход сохранён — как только связь появится, каталог обновится сам.';
+      renderAll();
+    }
     if (++tries >= 6) { stop(); return; }
     timer = setTimeout(run, 30000 * tries);
   };
   window.addEventListener('online', run);
-  timer = setTimeout(run, 30000);
+  timer = setTimeout(run, now ? 0 : 30000);
 }
 
 /* Ярлык на главном экране телефона открывает каталог с ?do=… Разбираем это
