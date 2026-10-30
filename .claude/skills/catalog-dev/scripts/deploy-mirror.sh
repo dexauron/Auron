@@ -29,9 +29,56 @@ trap 'git worktree remove --force "$WT" 2>/dev/null || true' EXIT
 TMP_DATA="$(mktemp -d)"
 [ -d "$WT/catalog/data" ] && cp -a "$WT/catalog/data" "$TMP_DATA/data"
 
+# ──────────────────────────────────────────────────────────────────────────────
+# СТОП-ПРОВЕРКА: не затереть чужую работу.
+#
+# 30.10.2026 этот скрипт молча удалил из деплой-ветки 15 файлов (boot.js,
+# catalog-crypto.js, publication-data.js, recover.html, ui.css и десять
+# проверок) и откатил правки в 30 других. Их добавили туда отдельными
+# запросами на слияние — в рабочей ветке их не было, а скрипт заменяет
+# catalog/ целиком. Владелец заметил по пропавшим возможностям.
+#
+# Поэтому перед заменой сверяемся: код в деплой-ветке должен совпадать с тем,
+# что это зеркало туда положило в прошлый раз (метка .mirror-source). Любое
+# расхождение — чья-то работа, и мы останавливаемся, а не переписываем.
+MARK="$WT/catalog/.mirror-source"
+SRC=""
+[ -f "$MARK" ] && SRC="$(sed -n 's/^SOURCE_COMMIT=//p' "$MARK" | head -1)"
+
+FOREIGN=""
+if [ -n "$SRC" ] && git cat-file -e "${SRC}^{commit}" 2>/dev/null; then
+  # что изменилось в коде деплой-ветки после прошлого зеркалирования
+  # quotepath=false — иначе пути с русскими буквами приходят в «\320\232…»
+  FOREIGN="$(cd "$WT" && git -c core.quotepath=false diff --name-only "$SRC" -- catalog \
+    ':(exclude)catalog/data' ':(exclude)catalog/.mirror-source')"
+else
+  # метки нет (первый запуск после этой правки) — ловим хотя бы удаления:
+  # файл есть в деплой-ветке и нет в рабочей, значит замена его убьёт
+  FOREIGN="$(cd "$WT" && git -c core.quotepath=false ls-files catalog \
+    | grep -v '^catalog/data/' | grep -v '^catalog/\.mirror-source$' \
+    | while IFS= read -r f; do [ -e "$REPO_ROOT/$f" ] || printf '%s\n' "$f"; done)"
+fi
+
+if [ -n "$FOREIGN" ]; then
+  echo "ОСТАНОВЛЕНО: в деплой-ветке есть код, которого нет в рабочей ветке." >&2
+  echo "Замена catalog/ затёрла бы его. Файлы:" >&2
+  echo "$FOREIGN" | sed 's/^/  /' >&2
+  echo >&2
+  echo "Сначала перенеси эту работу в рабочую ветку, потом зеркаль:" >&2
+  echo "  git fetch origin $DEPLOY_BRANCH" >&2
+  echo "  git log --oneline <рабочая-ветка>..origin/$DEPLOY_BRANCH -- catalog" >&2
+  echo "  git checkout origin/$DEPLOY_BRANCH -- <нужные файлы>   # и прогнать проверки" >&2
+  exit 1
+fi
+
 # полностью заменяем catalog/ содержимым рабочей ветки
 rm -rf "$WT/catalog"
 cp -a "$REPO_ROOT/catalog" "$WT/catalog"
+
+# метка для следующего запуска: из какого коммита взят этот код
+printf 'SOURCE_BRANCH=%s\nSOURCE_COMMIT=%s\n' \
+  "$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)" \
+  "$(git -C "$REPO_ROOT" rev-parse HEAD)" > "$WT/catalog/.mirror-source"
 
 # возвращаем данные витрины, опубликованные приложением
 if [ -d "$TMP_DATA/data" ]; then
