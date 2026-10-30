@@ -99,8 +99,14 @@ process.on('exit', (code) => { if (!completed && code === 0) { console.error('FA
         && entered.requests === (role === 'owner' ? 1 : 0), `${role}: новый пароль работает через форму при наличии старых шифртекстов в кэше`);
     }
     await logout(); await page.click('#adminBtn');
-    chk(await page.evaluate(() => document.getElementById('loginEmailWrap').hidden
-      && /новый пароль/.test(document.getElementById('loginHint').textContent)), 'файловый вход не требует email и объясняет смену пароля');
+    /* Вход — только пароль (решение владельца 30.10.2026). Поля email больше
+       нет в разметке вовсе, поэтому проверяем не «спрятано», а «отсутствует»:
+       спрятанное поле вернулось бы одной правкой стиля. */
+    chk(await page.evaluate(() => !document.getElementById('loginEmailWrap')
+      && !document.querySelector('#loginSheet input[type="email"]')
+      && document.querySelectorAll('#loginSheet input').length === 1
+      && /новый пароль/.test(document.getElementById('loginHint').textContent)),
+    'в окне входа одно поле — пароль, и объяснение про смену пароля');
     await page.fill('#loginPassword', 'old-owner-fixture'); await page.click('#loginSubmit');
     await page.waitForFunction(() => !document.getElementById('loginError').hidden);
     chk(await page.evaluate(() => /Пароль каталога не подошёл/.test(document.getElementById('loginError').textContent)
