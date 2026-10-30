@@ -83,11 +83,22 @@ const { harness } = require('./fixtures/publish-harness.cjs');
   check(await h.api.restoreSession()===false && h.local.has('wm_sv_auth') && h.disk.has('wm_auth_device_v2'), 'временная ошибка памяти устройства не удаляет сохранённый вход');
   h.ctx.idbGet=normalGet;
   check(await h.api.restoreSession() && h.state.isAdmin, 'после восстановления памяти вход возвращается без повторного ввода пароля');
+  /* Файл ключей не прочитался (нет его или пришёл обрывок). Раньше это
+     возвращало человека к паролю; с 30.10.2026 решение владельца — «чтобы
+     постоянно с аккаунта не выкидывало, пока сам пользователь не выйдет», —
+     и открывается своя зашифрованная копия. Безопасность от этого не слабеет:
+     ту же копию прежний код отдавал при выключенном интернете, а расшифровать
+     её может только ключ ЭТОГО устройства. Что остаётся запретным и проверяется
+     здесь же: непроверенным входом нельзя ПУБЛИКОВАТЬ — иначе сохранённая
+     копия перезаписала бы настоящий каталог. */
   for(const body of [null,'{fixture interrupted keys']) {
     const original=h.files.get('data/keys.json');
     body===null?h.files.delete('data/keys.json'):h.files.set('data/keys.json',body);
     h.state.isAdmin=false;h.state.session=null;
-    check(await h.api.restoreSession()===false && !h.state.isAdmin && h.local.has('wm_sv_auth') && h.disk.has('wm_auth_device_v2'), 'неподтверждённые данные ключей не дают права и не уничтожают прежний ключ устройства');
+    check(await h.api.restoreSession()===true && h.state.products[0].code==='001' && h.local.has('wm_sv_auth') && h.disk.has('wm_auth_device_v2') && h.state.sessionWarning,
+      'непрочитанный файл ключей не выбрасывает из аккаунта: открывается своя копия, ключ устройства цел');
+    let blocked=false;try{await h.api.publishFull(null)}catch(e){blocked=/сохранённая копия/.test(e.message)}
+    check(blocked, 'при непрочитанном файле ключей публикация запрещена');
     h.files.set('data/keys.json',original);await h.api.restoreSession();
   }
   h.state.staffPassword='fixture-owner-password';
