@@ -616,51 +616,77 @@ export async function clearSvAuth() {
   await Promise.all([idbDelete(AUTH_DEVICE), idbDelete(PRIVATE_DEVICE),
     idbSet(CACHE_KEY, { products: publicProducts(state.products), groups: publicGroups(state.groups), suppliers: [], ts: Date.now() })]).catch(() => {});
 }
+/* ── Вход держится, пока человек сам не выйдет ────────────────────────────────
+ * Решение владельца 30.10.2026: «чтобы постоянно с аккаунта не выкидывало,
+ * пока сам пользователь не выйдет».
+ *
+ * Сохранённый вход снимается РОВНО в двух случаях:
+ *   • человек нажал «Выйти из аккаунта»;
+ *   • конвертик его роли в keys.json изменился или исчез — пароль сменили,
+ *     доступ отозван. Это видно только когда файл действительно прочитан.
+ *
+ * Всё остальное — временные беды: нет сети, GitHub ответил 403 или 404, кусок
+ * каталога не докачался, браузер притормозил со своей базой. Раньше любая из
+ * них возвращала человека к паролю. Теперь открывается сохранённая копия —
+ * расшифровать её может только ключ с ЭТОГО устройства, — а проверка отзыва
+ * повторяется в фоне, когда появится связь (recheckAccess).
+ *
+ * Пароль по-настоящему нужен лишь тогда, когда ключа на устройстве больше нет:
+ * браузер вытер свою базу. Чтобы это случалось как можно реже, у браузера
+ * просим «постоянное хранилище» (keepStorage) и ставим каталог на домашний
+ * экран — установленное приложение данные не теряет. */
 export async function restoreSession() {
-  let saved;
+  // Указатель в localStorage — вторичный: роль и ключ лежат в базе устройства.
+  // В приватном окне localStorage может не читаться вовсе; это не причина
+  // требовать пароль, если ключ на месте.
+  let saved = null;
   try { saved = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null'); }
-  catch (e) { state.sessionWarning = 'Не удалось прочитать сохранённый вход. Данные устройства не удалены. Попробуй открыть каталог снова.'; return false; }
-  if (!saved) return false;
+  catch (e) { saved = null; }
   // Однократный переход со старого хранения пароля — только после проверки.
-  if (typeof saved.pw === 'string') {
+  if (saved && typeof saved.pw === 'string') {
     try {
       const role = await unlockAny(saved.pw);
       if (role === 'owner') applyServerless(saved.pw); else applyStaff(saved.pw);
       await rememberSession();
+      keepStorage();
       return true;
     } catch (e) { await clearSvAuth(); return false; }
   }
-  let device;
-  try { device = await idbGet(AUTH_DEVICE); }
-  catch (e) { state.sessionWarning = 'Не удалось прочитать сохранённый вход. Обнови страницу: данные устройства не удалены.'; return false; }
-  if (!device) { state.sessionWarning = 'Ключ сохранённого входа не найден на устройстве. Войди по паролю каталога.'; return false; }
-  if (saved.v !== 2 || !device || saved.role !== device.role || !ROLES.includes(device.role)
-    || device.version !== 4 || device.key?.extractable !== false) { await clearSvAuth(); return false; }
-  let data, mani, keys, verifiedKeys = false, revoked = false, cached = false;
+  // База устройства могла не успеть открыться — пробуем второй раз, а не
+  // выставляем человека к паролю из-за гонки при запуске.
+  let device = null;
+  for (let attempt = 0; attempt < 2 && !device; attempt++) {
+    try { device = await idbGet(AUTH_DEVICE); }
+    catch (e) { await new Promise((r) => setTimeout(r, 300)); }
+  }
+  if (!device) {
+    // Ключа нет: либо никто не входил, либо браузер вытер свою базу.
+    if (saved) state.sessionWarning = 'Браузер стёр сохранённый вход (так бывает, если каталог давно не открывали). Введи пароль один раз — дальше он сохранится. Чтобы не повторялось, добавь каталог на домашний экран.';
+    return false;
+  }
+  // Указатель противоречит ключу — это подмена, а не сбой: чистим.
+  if (!ROLES.includes(device.role) || device.version !== 4 || device.key?.extractable !== false
+    || (saved && (saved.v !== 2 || saved.role !== device.role))) { await clearSvAuth(); return false; }
+  let data, mani, keys, revoked = false, cached = false;
   try {
     const keysRaw = await fetchRaw(KEYS_FILE);
     if (keysRaw == null) throw new Error('INVALID_CATALOG');
     keys = JSON.parse(keysRaw);
     if (keys.v !== device.version) throw new Error('INVALID_CATALOG');
     if (!keys[device.role] || await digest(JSON.stringify(keys[device.role])) !== device.tag) { revoked = true; throw new Error('BAD_PASSWORD'); }
-    verifiedKeys = true;
     ({ data, mani } = await readRoleCatalog(device.key, device.role, device.version, false, device.tag));
   } catch (e) {
-    // Отзыв — изменение/удаление конверта роли, а не пропавшая часть или
-    // прерванное обновление. Временная ошибка не удаляет ключ с телефона.
+    // Отзыв — изменение или удаление конвертика роли. Это единственная ошибка,
+    // которая снимает вход; остальные означают «сейчас не получилось».
     if (revoked) { await clearSvAuth(); return false; }
-    if (e.code !== 'NETWORK' && !verifiedKeys) {
-      state.sessionWarning = 'Не удалось проверить сохранённый вход. Данные входа сохранены на устройстве. Обнови страницу при стабильном интернете.';
-      return false;
-    }
-    // Без сети отзыв узнать нельзя. Доступ даёт проверенный ключ к своей копии,
-    // а не роль из localStorage; после появления сети проверка повторится.
     const cache = await idbGet(PRIVATE_DEVICE).catch(() => null);
     try {
       if (!cache || cache.role !== device.role) throw new Error('BAD_PASSWORD');
       data = await keyDecrypt(device.key, cache.body, roleContext(device.role, 'offline'));
     } catch (err) {
-      state.sessionWarning = 'Не удалось открыть сохранённую копию. Данные входа сохранены. Попробуй снова при стабильном интернете.';
+      // Копии нет (вошли и сразу закрыли без единой синхронизации) — тогда
+      // пароль действительно нужен, но вход с устройства НЕ удаляем.
+      state.sessionWarning = 'Сохранённая копия каталога ещё не собралась. Подключись к интернету и обнови страницу — вход остался на устройстве.';
       return false;
     }
     keys = null; mani = null;
@@ -669,11 +695,61 @@ export async function restoreSession() {
   _cat = { version: device.version, role: device.role, key: device.key, keys, mani, tag: device.tag,
     staff: null, staffPassword: device.role === 'owner' ? data.staffPassword || null : null };
   applySnapshot(data, device.role);
-  if (cached) { state.catalogNeedsRefresh = true; state.sessionWarning = 'Показана сохранённая копия: сервер пока не отдал все данные. Вход сохранён. Перед импортом и публикацией обнови страницу при стабильном интернете.'; }
+  if (cached) {
+    state.catalogNeedsRefresh = true;
+    state.sessionWarning = 'Показана сохранённая копия: интернет пока не отдал свежие данные. Вход сохранён — как только связь появится, каталог обновится сам.';
+  }
   // Нет актуальной описи — публикация ждёт сети, офлайн-просмотр работает.
   if (device.role === 'owner') applyServerless(null); else applyStaff(null);
   state.securityNeedsUpgrade = device.version !== 4;
+  keepStorage();
   return true;
+}
+
+/* Попросить браузер не вытирать сохранённый вход. Браузеры сами убирают данные
+ * редко посещаемых сайтов (Safari — примерно через неделю), а вместе с ними
+ * уходит ключ, и человек оказывается перед паролем «ни с того ни с сего».
+ * Просим только у вошедших: гостю хранить нечего. Отказ не беда — просто
+ * вернётся прежнее поведение. */
+export function keepStorage() {
+  try {
+    if (navigator.storage && navigator.storage.persist) return navigator.storage.persist().catch(() => false);
+  } catch (e) { /* старый браузер */ }
+  return Promise.resolve(false);
+}
+
+/* Повторная проверка доступа после входа из сохранённой копии: отозван ли
+ * пароль и не пора ли подтянуть свежий каталог. Зовётся из app.js, когда
+ * появляется связь. Возвращает:
+ *   'revoked' — пароль сменили, вход снят (приложение сообщит и перезапустится)
+ *   'ok'      — доступ в силе; если удалось дочитать каталог, он уже свежий
+ *   'later'   — связи по-прежнему нет, попробуем позже */
+export async function recheckAccess() {
+  const active = _cat;
+  if (!active || !active.tag || !ROLES.includes(active.role) || active.version !== 4) return 'ok';
+  let keys;
+  try {
+    const raw = await fetchRaw(KEYS_FILE);
+    if (raw == null) return 'later';
+    keys = JSON.parse(raw);
+  } catch (e) { return 'later'; }
+  if (keys.v !== active.version) return 'later';
+  if (!keys[active.role] || await digest(JSON.stringify(keys[active.role])) !== active.tag) {
+    await clearSvAuth();
+    return 'revoked';
+  }
+  if (!active.mani) {
+    // Доступ в силе — дочитываем настоящий каталог, чтобы владелец мог
+    // публиковать без перезагрузки страницы.
+    try {
+      const { data, mani } = await readRoleCatalog(active.key, active.role, active.version, false, active.tag);
+      _cat = { ...active, keys, mani };
+      applySnapshot(data, active.role);
+      if (active.role === 'owner') applyServerless(null); else applyStaff(null);
+      await rememberSession();
+    } catch (e) { return 'later'; }
+  }
+  return 'ok';
 }
 
 // Включить режим «вошёл владелец без сервера»: кнопки админа, внутренние
