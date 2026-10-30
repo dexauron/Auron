@@ -706,6 +706,49 @@ export async function restoreSession() {
   return true;
 }
 
+/* ── Быстрый вход: сначала своя копия, сеть потом ────────────────────────────
+ * Владелец: «когда я открываю, сразу показывает, как будто я не вошёл, потом
+ * загружается всё и уже в моём аккаунте».
+ *
+ * Так и было: запуск сперва проверял файл ключей по сети и только потом
+ * поднимал роль. Замер при медленном интернете (задержка 3 с на ответ):
+ * владелец видел кнопку «Войти» и гостевые блоки больше шести секунд.
+ *
+ * Поэтому вход поднимается из копии на устройстве — без единого сетевого
+ * запроса. Копию можно расшифровать только неизвлекаемым ключом этого
+ * устройства, то есть это не «доверие localStorage», а тот же ключ, что и при
+ * обычном входе. Отзыв пароля и свежие данные догоняют сразу после, уже в
+ * фоне (recheckAccess), и экран к тому времени работает.
+ *
+ * Возвращает false, если копии ещё нет (первый вход на этом устройстве) —
+ * тогда зовут обычный restoreSession по сети. */
+export async function restoreFast() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null'); }
+  catch (e) { saved = null; }
+  if (saved && typeof saved.pw === 'string') return false;    // старое хранение — только полный путь
+  let device, cache;
+  try { [device, cache] = await Promise.all([idbGet(AUTH_DEVICE), idbGet(PRIVATE_DEVICE)]); }
+  catch (e) { return false; }
+  if (!device || !cache) return false;
+  if (!ROLES.includes(device.role) || device.version !== 4 || device.key?.extractable !== false
+    || cache.role !== device.role || (saved && (saved.v !== 2 || saved.role !== device.role))) return false;
+  let data;
+  try { data = await keyDecrypt(device.key, cache.body, roleContext(device.role, 'offline')); }
+  catch (e) { return false; }
+  if (!data || !Array.isArray(data.products)) return false;
+  _cat = { version: device.version, role: device.role, key: device.key, keys: null, mani: null, tag: device.tag,
+    staff: null, staffPassword: device.role === 'owner' ? data.staffPassword || null : null };
+  applySnapshot(data, device.role);
+  // Предупреждение НЕ показываем: это обычный запуск, а не сбой. Его поставит
+  // фоновая проверка, если связи не будет совсем.
+  state.catalogNeedsRefresh = true;
+  if (device.role === 'owner') applyServerless(null); else applyStaff(null);
+  state.securityNeedsUpgrade = false;
+  keepStorage();
+  return true;
+}
+
 /* Попросить браузер не вытирать сохранённый вход. Браузеры сами убирают данные
  * редко посещаемых сайтов (Safari — примерно через неделю), а вместе с ними
  * уходит ключ, и человек оказывается перед паролем «ни с того ни с сего».
