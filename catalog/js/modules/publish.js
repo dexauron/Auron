@@ -761,6 +761,22 @@ export function keepStorage() {
   return Promise.resolve(false);
 }
 
+/* Доступ отозван — закрытое уходит с экрана СРАЗУ, а не после перезагрузки.
+ * Без этого между «ключ стёрли» и «страница перезапустилась» оставалось
+ * несколько секунд, в которые на экране ещё висели закупочные цены и заявки. */
+function dropSessionState() {
+  ui.secretPw = null;
+  state.serverless = false;
+  state.session = null;
+  state.isAdmin = false; state.role = null;
+  state.canPurchase = false; state.canSales = false;
+  state.prices = []; state.sales = []; state.suppliers = []; state.contacts = {};
+  state.competitors = []; state.compPrices = []; state.requests = []; state.orders = [];
+  state.retailHist = {}; state.staffPassword = null;
+  state.products = publicProducts(state.products);   // остаётся только открытое
+  buildIndex();
+}
+
 /* Повторная проверка доступа после входа из сохранённой копии: отозван ли
  * пароль и не пора ли подтянуть свежий каталог. Зовётся из app.js, когда
  * появляется связь. Возвращает:
@@ -779,6 +795,7 @@ export async function recheckAccess(force = false) {
   if (keys.v !== active.version) return 'later';
   if (!keys[active.role] || await digest(JSON.stringify(keys[active.role])) !== active.tag) {
     await clearSvAuth();
+    dropSessionState();
     return 'revoked';
   }
   if (!active.mani || force) {
