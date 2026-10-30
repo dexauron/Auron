@@ -987,7 +987,11 @@
           <button class="btn btn-secondary" id="shopCopy1c">Скопировать для 1С</button>
           <button class="btn btn-secondary" id="shopFile1c">Скачать файл</button>
         </div>
-        <button class="btn btn-secondary btn-block emp-only" id="shopSaveReq">Сохранить как заявку</button>
+        <!-- Только владельцу: заявки лежат в общем каталоге, а писать туда может
+             только он. У сотрудника заявка пропала бы при перезагрузке — он бы
+             увидел «сохранено» и потерял список. Сотрудник присылает список
+             владельцу кнопкой «Отправить в WhatsApp». -->
+        <button class="btn btn-secondary btn-block admin-only" id="shopSaveReq">Сохранить как заявку</button>
         <button class="btn btn-ghost btn-block" id="shopClear">Очистить список</button>
       </div>
     </div>
