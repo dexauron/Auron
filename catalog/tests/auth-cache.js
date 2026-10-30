@@ -1,5 +1,14 @@
 // Настоящие service worker и CacheStorage: одинаковые данные после смены ключа
 // имеют прежний plaintext-hash, но ДРУГОЙ шифртекст. Старый кэш открывать нельзя.
+
+/* Куски каталога (адрес с ?h=) забирает service worker, а не страница. Запросы,
+ * сделанные ИЗ worker'а, Playwright подменяет только с этим флагом — он
+ * экспериментальный и читается при запуске процесса. Без него куски уходили в
+ * настоящую сеть и падали с ERR_FAILED: проверка разваливалась на ровном месте,
+ * хотя вход работал. Ставим здесь, до подключения Playwright, чтобы проверка не
+ * зависела от того, как её запустили. */
+process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS = '1';
+
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium, runner } = require('./helpers');
