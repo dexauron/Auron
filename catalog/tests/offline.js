@@ -15,8 +15,6 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
   const b = await chromium.launch();
   const { chk, done } = runner('ОФЛАЙН И ОБНОВЛЕНИЯ');
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
-  await ctx.route('**/data/index.json*', (r) => r.fulfill({ status: 404, body: 'fixture: legacy products' }));
-  await ctx.route('**/data/p/*.json*', (r) => r.abort('blockedbyclient'));
   await ctx.route('**/auth/v1/**', (r) => r.fulfill({ status: 200, body: '{}' }));
   await ctx.route('**/rest/v1/**', (r) => r.fulfill(J([])));
   await ctx.route('**/data/products.json*', (r) => r.fulfill(J(products)));
@@ -82,8 +80,7 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
     'когда новая версия взяла управление, страница один раз перезагружается сама');
   chk(/busyNow\(\)/.test(app) && /pendingReload/.test(app),
     'но не под руками: если человек печатает или открыл окно, обновление ждёт');
-  const boot = fs.readFileSync(path.join(__dirname, '..', 'js', 'boot.js'), 'utf8');
-  chk(/visibilitychange/.test(boot) && /reg\.update\(\)/.test(boot),
+  chk(/visibilitychange/.test(app) && /reg\.update\(\)/.test(app),
     'обновление проверяется при каждом возврате к приложению');
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);

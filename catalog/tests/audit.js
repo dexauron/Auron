@@ -9,12 +9,6 @@ const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const dir = path.join(root, 'js', 'modules');
 const files = fs.readdirSync(dir).filter((f) => f.endsWith('.js'));
 const src = Object.fromEntries(files.map((f) => [f, fs.readFileSync(path.join(dir, f), 'utf8')]));
-// Обычные скрипты из HTML тоже управляют экраном (ранний запуск не зависит
-// от модулей). Берём список из разметки, чтобы не пропустить следующий такой файл.
-for (const m of html.matchAll(/<script[^>]*\bsrc="(js\/[^\"]+)"/g)) {
-  const file = m[1].split(/[?#]/)[0];
-  if (!file.startsWith('js/modules/')) src[file] = fs.readFileSync(path.join(root, file), 'utf8');
-}
 const all = Object.values(src).join('\n');
 
 let fail = false;
@@ -64,9 +58,8 @@ const shell = (sw.match(/const SHELL = \[[\s\S]*?\];/) || [''])[0];
 chk(!shell.includes('vendor/xlsx.min.js'), 'тяжёлый разборщик не качается при первом заходе всем подряд');
 chk(/caches\.open\(CACHE\)[\s\S]{0,120}c\.put\(e\.request/.test(sw),
   'скачанное однажды (в т.ч. разборщик) сохраняется в офлайн-копию');
-chk(/const hit = await cache\.match\([^;]+;\s*if \(hit\) return hit;/.test(sw)
-  && /SHELL\.map\([\s\S]{0,100}cache: 'reload'/.test(sw),
-  'оболочка отдаётся из установленной копии, новая версия загружается целиком при установке');
+chk(/cache\.match\(e\.request[\s\S]{0,400}fetch\(new Request\(e\.request, \{ cache: 'reload' \}\)\)/.test(sw),
+  'оболочка отдаётся из офлайн-копии сразу, а свежая версия догружается в фоне');
 
 console.log(fail ? '\n=== АУДИТ РАЗМЕТКИ: ЕСТЬ ОШИБКИ ===' : '\n=== АУДИТ РАЗМЕТКИ: ОК ===');
 process.exit(fail ? 1 : 0);

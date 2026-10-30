@@ -1,21 +1,20 @@
 // Публикация на GitHub: шифрование, снимки, вход по паролю
 
-import { $, CFG, state, ui, CACHE_KEY, idbGet, idbSet, idbDelete } from './store.js';
-import { availability, publicProducts, publicGroups, staffSnapshot } from './publication-data.js';
-import { importCatalogKey, keyEncrypt, keyDecrypt, wrapCatalogKey, unwrapCatalogKey, passwordEncrypt, passwordDecrypt } from './catalog-crypto.js';
+import { $, CFG, state, ui } from './store.js';
 import { norm, toast } from './core.js';
 import { buildIndex } from './catalog.js';
 import { renderAll } from './render.js';
 import { orderRules } from './card.js';
 import { byName, saveCache, tidyMemory } from './data.js';
+import { autoDedup } from './photos.js';
 import { digest, partName, pool, shard } from './parts.js';
 
 /* ── Публикация каталога на GitHub (бесплатно, без сервера) ──────────────
    Владелец один раз вставляет «ключ» (GitHub token) — он хранится ТОЛЬКО на
    устройстве (localStorage), в репозиторий/код не попадает. Через него
    приложение сохраняет файлы каталога прямо на GitHub одним коммитом (атомарно,
-   чтобы деплой срабатывал один раз). Витрина — публично; внутренние данные
-   публикуются зашифрованными отдельными наборами для ролей. */
+   чтобы деплой срабатывал один раз). Витрина — публично; секретное (закупка,
+   «Ходовые») позже уедет в зашифрованный файл. */
 export const GH_TOKEN_KEY = 'wm_gh_token';
 export function ghToken() { try { return localStorage.getItem(GH_TOKEN_KEY) || ''; } catch (e) { return ''; } }
 export function ghSetToken(t) { try { if (t) localStorage.setItem(GH_TOKEN_KEY, t); else localStorage.removeItem(GH_TOKEN_KEY); } catch (e) { /* приватный режим */ } }
@@ -149,9 +148,58 @@ export async function ghCommit(files, message, opts = {}) {
  * покупателя выглядел сломанным. Секрета в штрихкоде нет — он напечатан на
  * самой упаковке. Артикул, поставщики, закупки и остаток числом остаются
  * закрытыми. */
-export function stockState(p, perDay) { return availability(p, perDay); }
-export function buildPublicProducts() { return publicProducts(state.products); }
-function buildPublicGroups() { return publicGroups(state.groups); }
+const PUBLIC_FIELDS = ['id', 'name', 'code', 'barcodes', 'category', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
+/* Отзывы уезжают отдельно и обрезанными: они и написаны для покупателя, но
+ * витрину качает каждый, и тащить в неё всю переписку незачем. */
+const PUB_REVIEWS = 5;
+
+/* Наличие товара: «есть / мало / нет».
+ * История решения. Сначала признак наличия лежал в открытой витрине, потом
+ * его убрали: каталог был инструментом сотрудников, и наружу не уходило ни
+ * цен, ни остатков. 2026-08-27 владелец решил иначе — покупателю наличие
+ * показываем: это то же, что он и так увидит, дойдя до полки, зато экономит
+ * ему дорогу. В витрину уходит ТОЛЬКО слово (in / low / out), само число
+ * остатка остаётся внутренним и не публикуется никогда.
+ * «Заканчивается» — если известны продажи и хватит меньше чем на 2 дня,
+ * иначе по простому порогу. Остатков не загружали — молчим. */
+const LOW_DAYS = 2;      // хватит меньше — «заканчивается»
+const LOW_QTY = 3;       // если продажи неизвестны — просто мало штук
+
+export function stockState(p, perDay) {
+  const q = p.stock != null ? Number(p.stock) : (p.stock_qty != null ? Number(p.stock_qty) : null);
+  // у покупателя числа нет — есть только слово из витрины
+  if (q == null || !Number.isFinite(q)) return p.stock_state || null;
+  if (q <= 0) return 'out';
+  if (perDay > 0 ? q / perDay < LOW_DAYS : q <= LOW_QTY) return 'low';
+  return 'in';
+}
+
+export function buildPublicProducts() {
+  return state.products
+    .map((p) => {
+      const o = {};
+      for (const k of PUBLIC_FIELDS) if (p[k] != null) o[k] = p[k];
+      // даты кладём без времени — «Новее» нужна только дата, а витрину качает
+      // каждый покупатель, лишние 14 символов на товар тут заметны
+      if (o.arrival_at) o.arrival_at = String(o.arrival_at).slice(0, 10);
+      // запасная дата: если товар ни разу не попадал в файл цен, «Новее»
+      // сортирует хотя бы по дате появления в каталоге
+      if (p.created_at) o.created_at = String(p.created_at).slice(0, 10);
+      // отзывы: последние пять, только имя, оценка, слова и дата
+      const rev = (p.reviews || []).slice(-PUB_REVIEWS)
+        .map((x) => ({ n: String(x.n || '').slice(0, 40), r: Number(x.r) || 0, t: String(x.t || '').slice(0, 200), d: String(x.d || '').slice(0, 10) }))
+        .filter((x) => x.r >= 1 && x.r <= 5);
+      if (rev.length) o.reviews = rev;
+      // наличие словом, без числа: «есть / мало / нет»
+      const st = stockState(p, null);
+      if (st) o.stock_state = st;
+      return o;
+    })
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
+}
+function buildPublicGroups() {
+  return state.groups.map((g) => ({ id: g.id, name: g.name, sort_order: g.sort_order }));
+}
 // «Популярное» по продажам: суммируем проданное количество на товар (из данных
 // продаж, товар ищем по коду → названию), берём топ. Публикуется отдельным
 // списком id — видно всем (и покупателям), без раскрытия самих цифр продаж.
@@ -184,7 +232,7 @@ export function buildPopularIds() {
  * версией — опубликуй заново».
  * 1 — без номера (до 27.08), 2 — наличие словом, 3 — штрихкоды покупателю,
  * 4 — отзывы соседей. */
-export const SHOWCASE_V = 5;
+export const SHOWCASE_V = 4;
 
 const PUB_PARTS = 16;              // кусков витрины
 const PUB_DIR = 'p';               // папка кусков витрины
@@ -268,46 +316,81 @@ async function doAutoPublish() {
    ЗАШИФРОВАННОМ виде. Шифруем паролем на устройстве (Web Crypto: AES-GCM, ключ
    из пароля через PBKDF2). На GitHub — только шифртекст, без пароля бесполезен.
    Разные пароли → разный доступ (владелец видит всё, сотрудник — только своё). */
-export async function encryptJSON(obj, password) { return passwordEncrypt(obj, password); }
-export async function decryptJSON(blob, password) { return passwordDecrypt(blob, password); }
+const ENC_ITER = 150000;
+async function deriveKey(password, salt) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: ENC_ITER, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+function b64(bytes) { let s = ''; const CH = 0x8000; for (let i = 0; i < bytes.length; i += CH) s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH)); return btoa(s); }
+function unb64(str) { const bin = atob(str); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+// Сжатие перед шифрованием. Каталог на 17 тыс. товаров — это десятки мегабайт
+// текста, который жмётся в разы. Без сжатия публикация упиралась в размер
+// запроса к GitHub и обрывалась с «Failed to fetch».
+const canGzip = typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
+async function gzipBytes(u8) {
+  const st = new Blob([u8]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Uint8Array(await new Response(st).arrayBuffer());
+}
+async function gunzipBytes(u8) {
+  const st = new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(st).arrayBuffer());
+}
 
-// Прежние цельные файлы читаются только для перехода владельца.
+export async function encryptJSON(obj, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(password, salt);
+  let bytes = new TextEncoder().encode(JSON.stringify(obj));
+  let z = null;
+  if (canGzip) { bytes = await gzipBytes(bytes); z = 'gzip'; }
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes));
+  return JSON.stringify({ v: 1, alg: 'AES-GCM', kdf: 'PBKDF2', iter: ENC_ITER, z, salt: b64(salt), iv: b64(iv), data: b64(ct) });
+}
+export async function decryptJSON(blob, password) {
+  const env = typeof blob === 'string' ? JSON.parse(blob) : blob;
+  const key = await deriveKey(password, unb64(env.salt));
+  let plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data)));
+  // старые файлы без сжатия читаются как раньше (поля z у них нет)
+  if (env.z === 'gzip') {
+    if (!canGzip) throw new Error('Браузер не умеет распаковывать этот каталог — обнови браузер');
+    plain = await gunzipBytes(plain);
+  }
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+/* ── Серверлес-каталог: полный каталог в зашифрованном файле на GitHub ──────
+   Сервера нет. Источник правды для владельца — зашифрованный файл
+   secret-catalog.enc (полный каталог: товары со всеми полями + закупочные цены
+   + продажи + контакты). Из него делается ОТКРЫТАЯ витрина products.json для
+   покупателей. Читать шифрофайл может кто угодно (он публичный), но открыть —
+   только по паролю. Писать (публиковать) — по GitHub-ключу владельца. */
 const SECRET_FILE = 'secret-catalog.enc'; // полный каталог владельца
 const STAFF_FILE = 'secret-staff.enc';    // урезанный каталог сотрудника (без продаж/«Ходовых»)
 // Цены других магазинов лежат ОТКРЫТО (не шифруются): это чужие ценники из
 // торгового зала, не наша тайна, а видеть их должны все — даже покупатель без входа.
-export const SV_AUTH_KEY = 'wm_sv_auth';         // указатель запомненного входа (без пароля)
+export const SV_AUTH_KEY = 'wm_sv_auth';         // запомненный вход на устройстве (роль + пароль)
 function rawUrl(file) {
   return `https://raw.githubusercontent.com/${CFG.GITHUB_OWNER}/${CFG.GITHUB_REPO}/${ghBranch()}/${CFG.DATA_PATH}/${file}`;
 }
 // null ТОЛЬКО если файла ещё нет (404). Сбой сети — исключение (чтобы не
 // спутать обрыв связи с «файла нет» и случайно не затереть каталог первой настройкой).
 async function fetchRaw(file) {
-  return fetchCatalogText(rawUrl(file) + '?t=' + Date.now(), true);
-}
-async function fetchCatalogText(url, raw = false) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12000);
-  let r;
-  try {
-    r = await fetch(url, { ...(raw ? { cache: 'no-store' } : {}), signal: controller.signal });
-    if (r.status === 404 && raw) return null;
-    if (!r.ok) { const err = new Error('Не удалось скачать данные (' + r.status + ')'); err.code = r.status >= 500 ? 'NETWORK' : 'ACCESS'; throw err; }
-    return await r.text();
-  } catch (e) {
-    if (e.code === 'NETWORK' || e.code === 'ACCESS') throw e;
-    const err = new Error('Нет связи с каталогом'); err.code = 'NETWORK'; throw err;
-  } finally { clearTimeout(timer); }
+  const r = await fetch(rawUrl(file) + '?t=' + Date.now(), { cache: 'no-store' });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error('Не удалось скачать данные (' + r.status + ')');
+  return r.text();
 }
 async function rawExists(file) {
   try { return (await fetchRaw(file)) != null; } catch (e) { return false; }
 }
 // Кусок читаем с подписью в адресе: изменился — скачается заново, не изменился
 // — придёт из кэша браузера. Так вход после мелкой правки не тянет весь каталог.
-async function fetchPart(file, h, keyTag) {
-  // Один plaintext-hash при смене ключа соответствует ДРУГОМУ шифртексту.
-  // Конверт роли меняется вместе с ключом; его публичная подпись разделяет кэш.
-  return fetchCatalogText(rawUrl(file) + '?h=' + h + '&k=' + keyTag);
+async function fetchPart(file, h) {
+  const r = await fetch(rawUrl(file) + '?h=' + h);
+  if (!r.ok) throw new Error('Не удалось скачать часть каталога (' + r.status + ')');
+  return r.text();
 }
 // полный товар без служебных полей индекса (начинаются с "_")
 function cleanProductsFull() {
@@ -327,187 +410,152 @@ export function buildFullSnapshot() {
     staffPassword: state.staffPassword || null, // пароль сотрудника хранится в каталоге владельца
   };
 }
-/* ── Закрытые данные: независимые ключи и файлы для каждой роли ──────────
-   v4: пароль сотрудника открывает только его набор. Владелец хранит полный
-   снимок и отдельный пароль сотрудника в своей зашифрованной описи.
-   v3 с общим ключом читается только владельцем для явного перехода на v4. */
+/* ── Закрытый каталог: один на всех, ключ — в «конвертиках» ─────────────────
+   Раньше один и тот же каталог шифровался ДВАЖДЫ: файл владельца и почти такой
+   же файл сотрудника. Это удваивало и хранение (два раза по 17 МБ), и работу
+   при каждой публикации, а появление третьей роли стоило бы ещё столько же.
+
+   Теперь каталог один. Он зашифрован случайным «ключом каталога», а сам ключ
+   лежит рядом в маленьких конвертиках — по одному на каждый пароль
+   (`keys.json`). Пароль открывает свой конвертик, из него достаётся ключ, а уже
+   ключом читается каталог. Отсюда:
+   — публикация вдвое меньше, новая роль стоит полкилобайта;
+   — смена пароля сотрудника переписывает конвертик, а не весь каталог;
+   — какая роль вошла, видно по тому, ЧЕЙ конвертик открылся.
+
+   Каталог лежит кусками `data/sec/…`, опись (мелочь + подписи кусков) — в
+   `data/catalog.enc`, тоже под ключом каталога. Уезжают только те куски, чья
+   подпись изменилась. */
 const SETS = [
   { name: 'products', n: 24, key: (r) => r.id },
   { name: 'prices', n: 12, key: (r) => r.product_id },
   { name: 'sales', n: 6, key: (r) => r.code || r.name },
 ];
-const ROLE_FILES = {
-  owner: { manifest: 'catalog.enc', dir: 'sec' },
-  staff: { manifest: 'staff-catalog.enc', dir: 'sec-staff' },
-};
-const KEYS_FILE = 'keys.json';
-const ROLES = ['owner', 'staff'];
-const roleContext = (role, file) => `wm.catalog.v4/${role}/${file}`;
-let _cat = null;
+const SEC_DIR = 'sec';               // куски каталога
+const KEYS_FILE = 'keys.json';       // конвертики с ключом каталога
+const CAT_FILE = 'catalog.enc';      // опись каталога
+const ROLES = ['owner', 'staff'];    // порядок проверки паролей при входе
 
-export function passwordProblem(password) {
-  return typeof password !== 'string' || password.trim().length < 12 || password.length > 1024
-    ? 'Новый пароль — от 12 до 1024 символов. Используй длинную уникальную фразу.' : '';
+// Что уже лежит на GitHub: ключ каталога и последняя опись. Заполняется при
+// входе и после публикации — чтобы не качать и не расшифровывать одно и то же.
+let _cat = null;                     // { raw, key, role, mani, staffPassword }
+
+async function wrapKey(raw, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const kek = await deriveKey(password, salt);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, kek, raw));
+  return { kdf: 'PBKDF2', iter: ENC_ITER, salt: b64(salt), iv: b64(iv), data: b64(ct) };
+}
+async function unwrapKey(entry, password) {
+  const kek = await deriveKey(password, unb64(entry.salt));
+  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(entry.iv) }, kek, unb64(entry.data)));
+}
+const importKey = (raw) => crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+
+async function encPart(key, obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  let bytes = new TextEncoder().encode(JSON.stringify(obj));
+  let z = null;
+  if (canGzip) { bytes = await gzipBytes(bytes); z = 'gzip'; }
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes));
+  return JSON.stringify({ z, iv: b64(iv), data: b64(ct) });
+}
+async function decPart(key, raw) {
+  const env = JSON.parse(raw);
+  let plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data)));
+  if (env.z === 'gzip') plain = await gunzipBytes(plain);
+  return JSON.parse(new TextDecoder().decode(plain));
 }
 
-async function readRoleCatalog(key, role, version, manifestOnly = false, keyTag = '') {
-  const spec = ROLE_FILES[role];
-  if (!spec || (!manifestOnly && !/^[a-f0-9]{16,64}$/.test(keyTag))) throw new Error('INVALID_CATALOG');
-  const raw = await fetchRaw(spec.manifest);
-  // Файл ключей уже существует: потеря описи не является первым запуском.
-  if (raw == null) throw new Error('INVALID_CATALOG');
-  const context = (file) => version === 4 ? roleContext(role, file) : '';
-  const mani = await keyDecrypt(key, raw, context('manifest'));
-  if (!mani || !mani.head || !mani.sets || (version === 4 && (mani.v !== 4 || mani.role !== role))) throw new Error('INVALID_CATALOG');
-  if (manifestOnly) return { mani };
-  const data = { ...mani.head };
-  for (const s of SETS) {
-    const set = mani.sets[s.name];
-    if (!set || set.n !== s.n || !Array.isArray(set.h) || set.h.length !== s.n
-      || !set.h.every((h) => typeof h === 'string' && /^[a-f0-9]{16,64}$/.test(h))) throw new Error('INVALID_CATALOG');
-    const chunks = await pool(Array.from({ length: set.n }, (_, i) => i), 6, async (i) => {
-      const rows = await keyDecrypt(key, await fetchPart(`${spec.dir}/${s.name}-${partName(i)}.enc`, set.h[i], keyTag), context(`${s.name}/${i}`));
-      if (!Array.isArray(rows)) throw new Error('INVALID_CATALOG');
-      // Ветка могла обновиться между чтением описи и частей. Проверяем подпись
-      // расшифрованного содержимого, чтобы не смешать две версии каталога.
-      if ((await digest(JSON.stringify(rows))).slice(0, set.h[i].length) !== set.h[i]) throw new Error('CATALOG_CHANGED');
-      return rows;
-    });
-    data[s.name] = [].concat(...chunks);
-  }
-  return { mani, data };
-}
-
+/* Открыть каталог паролем. Возвращает { data, role } либо бросает:
+   NO_SECRET — каталога ещё нет (первая настройка), BAD_PASSWORD — не подошёл.
+   Понимает и старый формат (два цельных файла) — на время перехода. */
 async function openCatalog(password) {
   const keysRaw = await fetchRaw(KEYS_FILE);
-  if (keysRaw == null) {
-    // Потеря файла ключей не означает пустой новый магазин.
-    if (await fetchRaw(ROLE_FILES.owner.manifest) != null || await fetchRaw(ROLE_FILES.staff.manifest) != null) throw new Error('INVALID_CATALOG');
-    return openLegacy(password);
-  }
+  if (keysRaw == null) return openLegacy(password);
   const ks = JSON.parse(keysRaw);
-  if (![3, 4].includes(ks.v)) throw new Error('INVALID_CATALOG');
   let raw = null; let role = null;
   for (const r of ROLES) {
     if (!ks[r]) continue;
-    try { raw = await unwrapCatalogKey(ks[r], password, ks.v === 4 ? roleContext(r, 'key') : ''); role = r; break; }
-    catch (e) { if (e.message === 'INVALID_CATALOG') throw e; }
+    try { raw = await unwrapKey(ks[r], password); role = r; break; } catch (e) { /* не этот пароль */ }
   }
   if (!raw) throw new Error('BAD_PASSWORD');
-  // Старый общий ключ не выдаём сотруднику: сначала владелец публикует v4.
-  if (ks.v === 3 && role === 'staff') throw new Error('SECURITY_UPGRADE_REQUIRED');
-  const key = await importCatalogKey(raw);
-  let mani, data;
-  try { ({ mani, data } = await readRoleCatalog(key, role, ks.v, false, await digest(JSON.stringify(ks[role])))); }
-  catch (e) { e.passwordAccepted = true; throw e; }
-  _cat = { version: ks.v, key, role, mani, keys: ks, staff: null, staffPassword: data.staffPassword || null };
-  state.securityNeedsUpgrade = ks.v !== 4;
+  const key = await importKey(raw);
+  const catRaw = await fetchRaw(CAT_FILE);
+  if (catRaw == null) throw new Error('NO_SECRET');
+  const mani = await decPart(key, catRaw);
+  const data = { ...mani.head };
+  for (const s of SETS) {
+    const set = mani.sets[s.name];
+    if (!set) { data[s.name] = []; continue; }
+    const idx = Array.from({ length: set.n }, (_, i) => i);
+    const chunks = await pool(idx, 6, async (i) => decPart(key, await fetchPart(`${SEC_DIR}/${s.name}-${partName(i)}.enc`, set.h[i])));
+    data[s.name] = [].concat(...chunks);
+  }
+  _cat = { raw, key, role, mani, staffPassword: data.staffPassword || null };
   return { data, role };
 }
 
+// Старый формат: два отдельных цельных файла. Читаем, пока владелец не
+// опубликовал каталог заново — при первой же публикации они удаляются.
 async function openLegacy(password) {
   const own = await fetchRaw(SECRET_FILE);
   if (own != null) {
-    try {
-      const data = await decryptJSON(own, password);
-      _cat = { version: 1, role: 'owner', key: null, keys: null };
-      state.securityNeedsUpgrade = true;
-      return { data, role: 'owner' };
-    } catch (e) { /* может быть прежний пароль сотрудника */ }
+    try { return { data: await decryptJSON(own, password), role: 'owner' }; } catch (e) { /* может, это пароль сотрудника */ }
   }
   const staff = await fetchRaw(STAFF_FILE);
   if (staff != null) {
-    let valid = false;
-    try { await decryptJSON(staff, password); valid = true; } catch (e) { /* неверный пароль */ }
-    if (valid) throw new Error('SECURITY_UPGRADE_REQUIRED');
+    try { return { data: await decryptJSON(staff, password), role: 'staff' }; } catch (e) { /* не подошёл */ }
   }
   if (own == null && staff == null) throw new Error('NO_SECRET');
   throw new Error('BAD_PASSWORD');
 }
 
-async function roleFiles(snapshot, role, key, prev) {
-  const spec = ROLE_FILES[role];
-  const head = { ...snapshot }, sets = {}, files = [];
+// Разложить каталог на опись + куски. Ключ каталога тот же, что и был, —
+// поэтому неизменившиеся куски не трогаем. rotate=true меняет ключ и
+// переписывает всё (нужно, когда сотрудника отключают сменой пароля).
+async function catalogFiles(password, rotate) {
+  const snapshot = buildFullSnapshot();
+  const staffPw = state.staffPassword || null;
+  // Смена пароля сотрудника — это отключение прежнего сотрудника. Старый ключ
+  // у него мог остаться, поэтому меняем ключ каталога: иначе «смена пароля»
+  // была бы видимостью защиты.
+  const staffChanged = _cat && _cat.staffPassword !== staffPw;
+  const fresh = !_cat || rotate || staffChanged;
+  const raw = fresh ? crypto.getRandomValues(new Uint8Array(32)) : _cat.raw;
+  const key = fresh ? await importKey(raw) : _cat.key;
+  const prev = fresh ? null : _cat.mani;
+
+  const head = { ...snapshot };
+  const sets = {};
+  const files = [];
   for (const s of SETS) {
     delete head[s.name];
     const parts = shard(snapshot[s.name] || [], s.n, s.key);
     const hashes = [];
     for (let i = 0; i < s.n; i++) {
-      const h = await digest(JSON.stringify(parts[i])); hashes.push(h);
-      if (!prev || prev.sets[s.name]?.h[i] !== h) files.push({
-        path: `${CFG.DATA_PATH}/${spec.dir}/${s.name}-${partName(i)}.enc`,
-        content: await keyEncrypt(key, parts[i], roleContext(role, `${s.name}/${i}`)),
-      });
+      const json = JSON.stringify(parts[i]);
+      const h = await digest(json);
+      hashes.push(h);
+      const known = prev && prev.sets[s.name] && prev.sets[s.name].h[i];
+      if (known !== h) files.push({ path: `${CFG.DATA_PATH}/${SEC_DIR}/${s.name}-${partName(i)}.enc`, content: await encPart(key, parts[i]) });
     }
     sets[s.name] = { n: s.n, h: hashes };
   }
-  const mani = { v: 4, role, savedAt: new Date().toISOString(), head, sets };
-  files.push({ path: `${CFG.DATA_PATH}/${spec.manifest}`, content: await keyEncrypt(key, mani, roleContext(role, 'manifest')) });
-  return { files, mani };
-}
-
-function passwordFailure(message) {
-  const err = new Error(message); err.code = 'password'; err.friendly = message; return err;
-}
-
-async function catalogFiles(password, rotate) {
-  if (_cat && _cat.role !== 'owner') throw new Error('FORBIDDEN');
-  const snapshot = buildFullSnapshot();
-  const staffPw = state.staffPassword || null;
-  const freshOwner = !_cat || _cat.version !== 4 || rotate;
-  if (freshOwner && passwordProblem(password)) throw passwordFailure(passwordProblem(password));
-  if (staffPw && staffPw === password) throw passwordFailure('Пароли владельца и сотрудника должны отличаться.');
-  const keys = freshOwner ? { v: 4 } : { ..._cat.keys };
-  let key = freshOwner ? null : _cat.key;
-  if (freshOwner) {
-    const raw = crypto.getRandomValues(new Uint8Array(32));
-    key = await importCatalogKey(raw);
-    keys.owner = await wrapCatalogKey(raw, password, roleContext('owner', 'key'));
+  const mani = { v: 3, savedAt: new Date().toISOString(), head, sets };
+  files.push({ path: `${CFG.DATA_PATH}/${CAT_FILE}`, content: await encPart(key, mani) });
+  if (fresh) {
+    const keys = { v: 3, owner: await wrapKey(raw, password) };
+    if (staffPw) keys.staff = await wrapKey(raw, staffPw);
+    files.push({ path: `${CFG.DATA_PATH}/${KEYS_FILE}`, content: JSON.stringify(keys) });
   }
-  const own = await roleFiles(snapshot, 'owner', key, freshOwner ? null : _cat.mani);
-  const files = [...own.files];
-  let staffSaved = null;
-  if (staffPw) {
-    const changed = !_cat || _cat.staffPassword !== staffPw;
-    let staff = !freshOwner && !changed ? _cat.staff : null;
-    if (!staff && !freshOwner && !changed && keys.staff) {
-      const raw = await unwrapCatalogKey(keys.staff, staffPw, roleContext('staff', 'key'));
-      const staffKey = await importCatalogKey(raw);
-      const { mani } = await readRoleCatalog(staffKey, 'staff', 4, true);
-      staff = { key: staffKey, mani };
-    }
-    const freshStaff = !staff || rotate || changed;
-    if (freshStaff) {
-      if (passwordProblem(staffPw)) throw passwordFailure('Пароль сотрудника: ' + passwordProblem(staffPw));
-      // После восстановления входа исходного пароля владельца в памяти нет.
-      // Сравниваем новый пароль сотрудника с конвертом владельца, а не с null.
-      if (!freshOwner) {
-        let same = false;
-        try { await unwrapCatalogKey(keys.owner, staffPw, roleContext('owner', 'key')); same = true; }
-        catch (e) { if (e.message === 'INVALID_CATALOG') throw e; }
-        if (same) throw passwordFailure('Пароли владельца и сотрудника должны отличаться.');
-      }
-      const raw = crypto.getRandomValues(new Uint8Array(32));
-      staff = { key: await importCatalogKey(raw), mani: null };
-      keys.staff = await wrapCatalogKey(raw, staffPw, roleContext('staff', 'key'));
-    }
-    const out = await roleFiles(staffSnapshot(snapshot), 'staff', staff.key, freshStaff ? null : staff.mani);
-    files.push(...out.files);
-    staffSaved = { key: staff.key, mani: out.mani };
-  } else {
-    if (keys.staff && _cat?.version === 4) {
-      files.push({ path: `${CFG.DATA_PATH}/${ROLE_FILES.staff.manifest}`, content: null });
-      for (const s of SETS) for (let i = 0; i < s.n; i++) files.push({ path: `${CFG.DATA_PATH}/sec-staff/${s.name}-${partName(i)}.enc`, content: null });
-    }
-    delete keys.staff;
-  }
-  if (!_cat || JSON.stringify(keys) !== JSON.stringify(_cat.keys)) files.push({ path: `${CFG.DATA_PATH}/${KEYS_FILE}`, content: JSON.stringify(keys) });
-  return { files, saved: { version: 4, key, role: 'owner', mani: own.mani, keys, staff: staffSaved, staffPassword: staffPw } };
+  return { files, saved: { raw, key, role: 'owner', mani, staffPassword: staffPw } };
 }
 
+// Опубликовать всё одним коммитом: открытая витрина + закрытый каталог.
+// Возвращает { sha, sent } — сколько файлов реально уехало.
 export async function publishFull(password, { onProgress = null, rotate = false } = {}) {
-  if (!state.isAdmin) throw new Error('FORBIDDEN');
-  if (_cat?.version === 4 && (!_cat.keys || !_cat.mani)) throw new Error('Показана сохранённая копия. Перед публикацией открой каталог заново при стабильном интернете.');
   const prevIdx = await loadPubIndex();
   const { files, index } = await showcaseFiles(prevIdx);
   files.push({ path: `${CFG.DATA_PATH}/${INDEX_FILE}`, content: JSON.stringify(index) });
@@ -516,20 +564,16 @@ export async function publishFull(password, { onProgress = null, rotate = false 
   const cat = await catalogFiles(password, rotate);
   files.push(...cat.files);
   // переход со старого формата: две цельные копии больше не нужны
-  for (const old of [SECRET_FILE, STAFF_FILE, 'floor.enc']) {
+  for (const old of [SECRET_FILE, STAFF_FILE]) {
     if (await rawExists(old)) files.push({ path: `${CFG.DATA_PATH}/${old}`, content: null });
   }
   const sha = await ghCommit(files, 'Каталог: обновлены витрина и защищённые данные', { onProgress });
   _cat = cat.saved;
-  state.securityNeedsUpgrade = false;
-  await rememberSession();
   return { sha, sent: files.length };
 }
 
 // Разложить открытый каталог по состоянию приложения.
 function applySnapshot(data, role) {
-  state.sessionWarning = '';
-  state.catalogNeedsRefresh = false;
   state.groups = data.groups || [];
   state.suppliers = data.suppliers || [];
   state.products = (data.products || []).slice().sort(byName);
@@ -540,10 +584,10 @@ function applySnapshot(data, role) {
   state.compPrices = data.compPrices || [];
   state.unitCoef = data.unitCoef || {};
   state.retailHist = data.retailHist || {};
-  state.requests = role === 'owner' ? data.requests || [] : [];
+  state.requests = data.requests || [];
   state.orders = data.orders || [];
   if (data.orderRules) state.orderRules = data.orderRules;
-  state.staffPassword = role === 'owner' ? data.staffPassword || null : null;
+  state.staffPassword = data.staffPassword || null;
   tidyMemory();          // каталог мог прийти с залежавшейся историей — чистим сразу
   buildIndex();
   state.popularIds = buildPopularIds();
@@ -563,118 +607,20 @@ export async function unlockAny(password) {
 }
 // Вход именно владельца (запомненный вход, проверки).
 export async function unlockSecret(password) {
-  const previous = _cat;
-  const { data, role } = await openCatalog(password);
-  if (role !== 'owner') { _cat = previous; throw new Error('BAD_PASSWORD'); }
-  applySnapshot(data, role);
+  const role = await unlockAny(password);
+  if (role !== 'owner') throw new Error('BAD_PASSWORD');
   return true;
 }
-// Ожидаемая роль проверяется до изменения данных текущего пользователя.
+// Вход именно сотрудника.
 export async function unlockStaff(password) {
-  const previous = _cat;
-  const { data, role } = await openCatalog(password);
-  if (role !== 'staff') { _cat = previous; throw new Error('BAD_PASSWORD'); }
-  applySnapshot(data, role);
+  const role = await unlockAny(password);
+  if (role !== 'staff') throw new Error('BAD_PASSWORD');
   return true;
 }
 
-// На устройстве остаётся неизвлекаемый CryptoKey, а не исходный пароль.
-// Закрытая офлайн-копия зашифрована и привязана к роли. JSON в localStorage
-// содержит только указатель; подмена owner/staff не открывает другой шифртекст.
-const AUTH_DEVICE = 'wm_auth_device_v2';
-const PRIVATE_DEVICE = 'wm_private_device_v2';
-let authGeneration = 0;
-let rememberWork = Promise.resolve();
-export function rememberSession() {
-  const active = _cat;
-  if (active?.version !== 4 || !active.key || (!active.keys && !active.tag) || !ROLES.includes(active.role)) return Promise.resolve();
-  const gen = authGeneration, role = active.role;
-  const snapshot = role === 'owner' ? buildFullSnapshot() : staffSnapshot(buildFullSnapshot());
-  rememberWork = rememberWork.catch(() => {}).then(async () => {
-    if (gen !== authGeneration) return;
-    const old = await idbGet(AUTH_DEVICE);
-    if (old && old.role !== role) { localStorage.removeItem(SV_AUTH_KEY); await idbDelete(AUTH_DEVICE); await idbDelete(PRIVATE_DEVICE); }
-    const tag = active.keys ? await digest(JSON.stringify(active.keys[role])) : active.tag;
-    const body = await keyEncrypt(active.key, snapshot, roleContext(role, 'offline'));
-    if (gen !== authGeneration) return;
-    await idbSet(PRIVATE_DEVICE, { role, body });
-    await idbSet(AUTH_DEVICE, { v: 2, role, key: active.key, tag, version: active.version });
-    if (gen === authGeneration) localStorage.setItem(SV_AUTH_KEY, JSON.stringify({ v: 2, role }));
-  });
-  // Отказ IndexedDB не превращает успешную публикацию в сообщение о провале.
-  return rememberWork.catch(() => {});
-}
-function saveSvAuth() {
-  try { const old = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null'); if (old?.pw || (old && old.role !== _cat?.role)) localStorage.removeItem(SV_AUTH_KEY); } catch (e) { /* приватный режим */ }
-  return rememberSession();
-}
-export async function clearSvAuth() {
-  authGeneration++;
-  try { localStorage.removeItem(SV_AUTH_KEY); } catch (e) { /* приватный режим */ }
-  _cat = null;
-  await rememberWork.catch(() => {});
-  await Promise.all([idbDelete(AUTH_DEVICE), idbDelete(PRIVATE_DEVICE),
-    idbSet(CACHE_KEY, { products: publicProducts(state.products), groups: publicGroups(state.groups), suppliers: [], ts: Date.now() })]).catch(() => {});
-}
-export async function restoreSession() {
-  let saved;
-  try { saved = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null'); }
-  catch (e) { state.sessionWarning = 'Не удалось прочитать сохранённый вход. Данные устройства не удалены. Попробуй открыть каталог снова.'; return false; }
-  if (!saved) return false;
-  // Однократный переход со старого хранения пароля — только после проверки.
-  if (typeof saved.pw === 'string') {
-    try {
-      const role = await unlockAny(saved.pw);
-      if (role === 'owner') applyServerless(saved.pw); else applyStaff(saved.pw);
-      await rememberSession();
-      return true;
-    } catch (e) { await clearSvAuth(); return false; }
-  }
-  let device;
-  try { device = await idbGet(AUTH_DEVICE); }
-  catch (e) { state.sessionWarning = 'Не удалось прочитать сохранённый вход. Обнови страницу: данные устройства не удалены.'; return false; }
-  if (!device) { state.sessionWarning = 'Ключ сохранённого входа не найден на устройстве. Войди по паролю каталога.'; return false; }
-  if (saved.v !== 2 || !device || saved.role !== device.role || !ROLES.includes(device.role)
-    || device.version !== 4 || device.key?.extractable !== false) { await clearSvAuth(); return false; }
-  let data, mani, keys, verifiedKeys = false, revoked = false, cached = false;
-  try {
-    const keysRaw = await fetchRaw(KEYS_FILE);
-    if (keysRaw == null) throw new Error('INVALID_CATALOG');
-    keys = JSON.parse(keysRaw);
-    if (keys.v !== device.version) throw new Error('INVALID_CATALOG');
-    if (!keys[device.role] || await digest(JSON.stringify(keys[device.role])) !== device.tag) { revoked = true; throw new Error('BAD_PASSWORD'); }
-    verifiedKeys = true;
-    ({ data, mani } = await readRoleCatalog(device.key, device.role, device.version, false, device.tag));
-  } catch (e) {
-    // Отзыв — изменение/удаление конверта роли, а не пропавшая часть или
-    // прерванное обновление. Временная ошибка не удаляет ключ с телефона.
-    if (revoked) { await clearSvAuth(); return false; }
-    if (e.code !== 'NETWORK' && !verifiedKeys) {
-      state.sessionWarning = 'Не удалось проверить сохранённый вход. Данные входа сохранены на устройстве. Обнови страницу при стабильном интернете.';
-      return false;
-    }
-    // Без сети отзыв узнать нельзя. Доступ даёт проверенный ключ к своей копии,
-    // а не роль из localStorage; после появления сети проверка повторится.
-    const cache = await idbGet(PRIVATE_DEVICE).catch(() => null);
-    try {
-      if (!cache || cache.role !== device.role) throw new Error('BAD_PASSWORD');
-      data = await keyDecrypt(device.key, cache.body, roleContext(device.role, 'offline'));
-    } catch (err) {
-      state.sessionWarning = 'Не удалось открыть сохранённую копию. Данные входа сохранены. Попробуй снова при стабильном интернете.';
-      return false;
-    }
-    keys = null; mani = null;
-    cached = true;
-  }
-  _cat = { version: device.version, role: device.role, key: device.key, keys, mani, tag: device.tag,
-    staff: null, staffPassword: device.role === 'owner' ? data.staffPassword || null : null };
-  applySnapshot(data, device.role);
-  if (cached) { state.catalogNeedsRefresh = true; state.sessionWarning = 'Показана сохранённая копия: сервер пока не отдал все данные. Вход сохранён. Перед импортом и публикацией обнови страницу при стабильном интернете.'; }
-  // Нет актуальной описи — публикация ждёт сети, офлайн-просмотр работает.
-  if (device.role === 'owner') applyServerless(null); else applyStaff(null);
-  state.securityNeedsUpgrade = device.version !== 4;
-  return true;
-}
+// запомнить вход на устройстве (по просьбе владельца — не выходить до явного выхода)
+function saveSvAuth(role, pw) { try { localStorage.setItem(SV_AUTH_KEY, JSON.stringify({ role, pw })); } catch (e) { /* приватный режим */ } }
+export function clearSvAuth() { try { localStorage.removeItem(SV_AUTH_KEY); } catch (e) { /* некритично */ } }
 
 // Включить режим «вошёл владелец без сервера»: кнопки админа, внутренние
 // разделы, запомнить пароль для публикаций и вход на устройстве.
@@ -683,22 +629,27 @@ export function applyServerless(pw) {
   state.serverless = true;
   state.session = { user: { email: 'owner' }, serverless: true };
   state.isAdmin = true; state.role = 'admin'; state.canPurchase = true; state.canSales = true;
-  saveSvAuth();
+  saveSvAuth('owner', pw);
+  $('fabAdd').hidden = false;
   $('adminBtn').classList.toggle('is-admin', true);
   $('adminBtnLabel').hidden = true;
   saveCache();
   renderAll();
-  // При входе ничего не удаляем автоматически по имени или штрихкоду.
-
+  /* Тихо убрать дубли, если импорт их наплодил. В свободную минуту, а не через
+     ровно две секунды: раньше эта уборка обходила весь каталог ровно тогда,
+     когда человек уже начал листать, и телефон замирал у него в руках. */
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(autoDedup, { timeout: 15000 });
+  else setTimeout(autoDedup, 4000);
 }
-// Сотрудник-бухгалтер видит разрешённые закупки, продажи и контакты,
-// но не правит опубликованный каталог и не получает секреты владельца.
+// Включить режим «вошёл сотрудник»: видит закупку/контакты, но не «Ходовые» и
+// не правит каталог. Тоже запоминается на устройстве.
 export function applyStaff(pw) {
   ui.secretPw = null; // сотрудник не публикует
   state.serverless = true;
   state.session = { user: { email: 'staff' }, serverless: true, staff: true };
   state.isAdmin = false; state.role = 'staff'; state.canPurchase = true; state.canSales = true;
-  saveSvAuth();
+  saveSvAuth('staff', pw);
+  $('fabAdd').hidden = true;
   $('adminBtn').classList.toggle('is-admin', true);
   $('adminBtnLabel').hidden = true;
   saveCache();

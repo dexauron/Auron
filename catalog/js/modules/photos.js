@@ -299,15 +299,6 @@ function findDuplicateIds() {
   const toDelete = [];
   for (const arr of groups.values()) {
     if (arr.length < 2) continue;
-    // Совпадение имени/штрихкодов не доказывает тождество. Не удаляем другой
-    // код, отличающиеся фото/реквизиты или товар, на который ссылаются документы.
-    const code = arr[0].code;
-    if (!code || !arr.every((p) => p.code === code)) continue;
-    const business = (p) => JSON.stringify(Object.fromEntries(Object.keys(p).sort()
-      .filter((k) => !['id', 'created_at', 'updated_at'].includes(k) && !k.startsWith('_')).map((k) => [k, p[k]])));
-    if (!arr.every((p) => business(p) === business(arr[0]))) continue;
-    const refs = JSON.stringify([state.prices, state.compPrices, state.orders, state.requests]);
-    if (arr.some((p) => refs.includes(JSON.stringify(p.id)))) continue;
     arr.sort((a, b) => {
       if (!!a.code !== !!b.code) return a.code ? -1 : 1;
       return String(a.created_at || '').localeCompare(String(b.created_at || ''));
@@ -342,6 +333,12 @@ export function dedupProducts() { // ручная кнопка
   const ids = findDuplicateIds();
   if (!ids.length) { toast('Дублей не найдено'); return; }
   if (confirm(`Найдено дублей: ${ids.length}. Убрать их? Останется по одному товару.`)) svDedup(ids, false);
+}
+
+export async function autoDedup() { // тихо, само (после импорта, при входе владельца)
+  if (!isOwner()) return;
+  const ids = findDuplicateIds();
+  if (ids.length) await svDedup(ids, true);
 }
 
 export async function runPhotoSearch() {

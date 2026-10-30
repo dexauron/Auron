@@ -25,7 +25,7 @@ const GLOBALS = ['window', 'document', 'navigator', 'location', 'localStorage', 
   const root = path.join(__dirname, '..');
   const files = [
     ...fs.readdirSync(path.join(root, 'js', 'modules')).filter((f) => f.endsWith('.js')).map((f) => `js/modules/${f}`),
-    'js/config.js', 'js/boot.js', 'js/xlsx-worker.js', 'sw.js',
+    'js/config.js', 'js/xlsx-worker.js', 'sw.js',
   ];
 
   let eslint;

@@ -94,8 +94,6 @@ const OTHER_STORE = {
   // ── 3. Тот же движок с другими настройками — другой магазин ──
   {
     const ctx = await b.newContext({ viewport: { width: 390, height: 900 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
-    await ctx.route('**/data/index.json*', (r) => r.fulfill({ status: 404, body: 'fixture: legacy products' }));
-    await ctx.route('**/data/p/*.json*', (r) => r.abort('blockedbyclient'));
     // настройки подменяем ПОСЛЕ загрузки config.js — иначе он перезапишет наши
     await ctx.route('**/js/config.js', (r, q) => r.fulfill({
       status: 200, contentType: 'application/javascript',

@@ -233,7 +233,16 @@ export function shopFromHash() {
       : state.products.find((x) => x.code != null && String(x.code) === key);
     if (!p) { missing++; continue; }
     if (have.has(p.id)) continue;                      // уже есть — количество не трогаем
-    list.push({ id: p.id, name: p.name || '', code: p.code || '', price: priceOf(p), qty: Number(qty) || 1, done: false });
+    /* Кладём тот же набор полей, что и обычное добавление: артикул, штрихкод,
+       единицу и признак «весовой». Без них присланный список выгружался в 1С
+       неполным, стоило товару уйти из каталога, а у весового товара кнопка «+»
+       шагала по килограмму вместо полукилограмма. */
+    list.push({
+      id: p.id, name: p.name || '', code: p.code || '', article: p.article || '',
+      barcode: (p.barcodes || [])[0] || '',
+      unit: p.is_weighted ? 'кг' : (p.unit || 'шт'), weighted: !!p.is_weighted,
+      price: priceOf(p), qty: Number(qty) || 1, done: false,
+    });
     have.add(p.id);
     added++;
   }
@@ -456,7 +465,16 @@ export function bindShopping() {
   $('shopWa').addEventListener('click', shopToWhatsApp);
   /* Выгрузка в 1С и «Сохранить как заявку» — только вошедшим: это рабочая
      часть, покупателю она ни к чему. */
-  $('shopFind').addEventListener('input', (e) => { ui.shopQuery = e.target.value; renderFind(); });
+  /* Пауза перед поиском — как у главного поля (150 мс). Без неё каждая буква
+     запускала поиск заново: на двух общих буквах («ма» встречается в каждом
+     названии) это 315 мс работы на нажатие, нажатия складывались, и поле
+     начинало липнуть под пальцем. */
+  let findWait;
+  $('shopFind').addEventListener('input', (e) => {
+    const v = e.target.value;
+    clearTimeout(findWait);
+    findWait = setTimeout(() => { ui.shopQuery = v; renderFind(); }, 150);
+  });
   $('shopFindList').addEventListener('click', (e) => {
     const b = e.target.closest('[data-shop-pick]');
     if (b) pickFound(b.dataset.shopPick);

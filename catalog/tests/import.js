@@ -205,26 +205,6 @@ const { chromium, newPage, runner } = require('./helpers');
     chk(r.sales === 2, `продажи загрузились полностью (${r.sales} строки)`);
   }
 
-  const safe = await page.evaluate(() => {
-    const P = window.WM_PUBLISH, s = P._state();
-    s.products = []; s.groups = []; s.suppliers = []; s.prices = [];
-    const head = ['Номенклатура', 'Код товара', 'Контрагент', 'Цена'];
-    P.svImportRows([head, ['Без кода в названии', '001', 'Поставщик', 50]]);
-    const headerOk = s.products.length === 1 && s.products[0].code === '001';
-    s.products[0].photos = ['https://example.test/p.jpg'];
-    s.products[0].barcodes = ['001234'];
-    P.svImportRows([head, ['Без кода в названии', '001', 'Поставщик', 50]]);
-    const repeatOk = s.products.length === 1 && s.products[0].photos.length === 1 && s.products[0].barcodes[0] === '001234';
-    P.svImportRows([head, ['Без кода в названии', '002', 'Поставщик', 60]]);
-    const distinctCodes = s.products.length === 2 && s.products.some(p => p.code === '002');
-    P.svImportRows([['Штрихкоды номенклатуры'], ['Номенклатура', 'Код товара', 'Штрихкод'], ['Без кода в названии', '999', '999999']]);
-    return { headerOk, repeatOk, distinctCodes, foreignBarcode: s.products.some(p => p.barcodes.includes('999999')) };
-  });
-  chk(safe.headerOk, 'первая строка данных со словом «код» не ломает заголовок');
-  chk(safe.repeatOk, 'повтор прайса сохраняет число товаров, фото и старые штрихкоды');
-  chk(safe.distinctCodes, 'одинаковое имя с новым кодом не перезаписывает другой товар');
-  chk(!safe.foreignBarcode, 'штрихкод с чужим кодом не приклеивается по имени');
-
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();

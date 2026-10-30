@@ -78,8 +78,12 @@ const groups = [
     return getComputedStyle(t).position === 'fixed' && Math.abs(r.bottom - innerHeight) < 2;
   });
   chk(atBottom, 'панель закреплена внизу экрана');
-  chk(await page.evaluate(() => !document.getElementById('fabAdd')),
-    'плавающей кнопки «+» нет на главном экране');
+  const overlap = await page.evaluate(() => {
+    const t = document.getElementById('tabbar').getBoundingClientRect();
+    const fab = document.getElementById('fabAdd').getBoundingClientRect();
+    return fab.bottom > t.top;
+  });
+  chk(!overlap, 'кнопка «＋» не перекрывается панелью');
 
   // ── экран категорий ──
   await page.click('.tabbar [data-tab="pick"]'); await page.waitForTimeout(500);
@@ -136,8 +140,6 @@ const groups = [
   // раскладка по категориям — для сотрудника: покупателю каталог показывается
   // простым списком, и заголовки категорий в нём не нужны
   await asOwner(page, {});
-  chk(await page.evaluate(() => !document.getElementById('fabAdd')),
-    'после входа владельца плавающая кнопка «+» не появляется');
   await page.fill('#searchInput', 'мол'); await page.waitForTimeout(700);
   const search = await page.evaluate(() => ({
     seps: [...document.querySelectorAll('.cat-sep')].map((x) => x.innerText.replace(/\s+/g, ' ').trim()),
