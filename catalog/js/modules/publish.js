@@ -794,8 +794,11 @@ export async function recheckAccess(force = false) {
   } catch (e) { return 'later'; }
   if (keys.v !== active.version) return 'later';
   if (!keys[active.role] || await digest(JSON.stringify(keys[active.role])) !== active.tag) {
-    await clearSvAuth();
+    /* Порядок важен: сначала закрытое уходит из памяти, потом стираем ключ с
+       устройства. Наоборот — и между двумя шагами остаётся миг, когда вход уже
+       «снят», а закупочные цены ещё на экране. */
     dropSessionState();
+    await clearSvAuth();
     return 'revoked';
   }
   if (!active.mani || force) {
