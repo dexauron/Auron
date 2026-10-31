@@ -148,7 +148,24 @@ const { harness } = require('./fixtures/publish-harness.cjs');
   try { await h.api.publishFull(null); } catch (e) { published = false; why = e.message; }
   check(published, `публикация сразу после запуска проходит сама (${why})`);
 
-  // ── 13. Просьба к браузеру не вытирать вход ─────────────────────────────────
+  // ── 13. Сотрудник: тот же быстрый запуск, но без прав владельца ─────────────
+  /* Быстрый запуск поднимает роль из копии на устройстве, и легко ошибиться,
+     отдав сотруднику права владельца. Проверяем прямо: его копия открывается,
+     заявок он не видит (они владельца), правка каталога ему запрещена. */
+  const STAFF = 'fixture-staff-password';      // пароль сотрудника из стенда
+  h.files.set(keysFile, intact);
+  await h.api.unlockSecret(OWNER); h.api.applyServerless(OWNER);
+  await h.api.unlockStaff(STAFF); h.api.applyStaff(null); await h.api.rememberSession();
+  forget();
+  const asStaff = await h.api.restoreFast();
+  check(asStaff === true && h.state.role === 'staff' && h.state.isAdmin === false,
+    `сотрудник тоже входит мгновенно и без прав владельца (роль ${h.state.role}, владелец: ${h.state.isAdmin})`);
+  check((h.state.requests || []).length === 0, 'заявки владельца сотруднику не достались');
+  let staffBlocked = false;
+  try { await h.api.publishFull(null); } catch (e) { staffBlocked = e.message === 'FORBIDDEN'; }
+  check(staffBlocked, 'сотрудник не может опубликовать каталог');
+
+  // ── 14. Просьба к браузеру не вытирать вход ─────────────────────────────────
   /* Главная причина «выкинуло само» — браузер убирает данные редко посещаемых
      сайтов (Safari примерно через неделю). Поэтому просим постоянное хранилище.
      В старом браузере такого нет совсем: просьба обязана тихо вернуть false, а
