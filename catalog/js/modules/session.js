@@ -12,25 +12,24 @@
  * Отдельным модулем, а не в app.js: тот и без них на пределе (проверка
  * `modules` держит планку 1200 строк), а эти двое — одна тема. */
 import { state } from './store.js';
-import { toast } from './core.js';
+import { appBusy, toast } from './core.js';
 import { renderAll } from './render.js';
-import { refresh } from './imports.js';
+import { importPending } from './imports.js';
+import { refresh } from './showcase.js';
 import { recheckAccess } from './publish.js';
 
-/* Каталог стоит на домашнем экране и живёт неделями: если обновлять данные
- * только при холодном запуске, человек неделю смотрит на цены первого дня.
- * Поэтому тихо обновляемся, когда он вернулся в каталог после паузы и когда
- * появилась связь. Шумного ничего: ни крутилок, ни сообщений.
- *
- * Вошедшему перечитываем его зашифрованный каталог (куски с неизменившейся
- * подписью берутся из памяти телефона, качается только изменившееся),
- * покупателю — витрину. */
+/* Шумного ничего: ни крутилок, ни сообщений. Вошедшему перечитываем его
+ * зашифрованный каталог (куски с неизменившейся подписью берутся из памяти
+ * телефона, качается только изменившееся), покупателю — витрину. */
 export function keepFresh() {
   const QUIET = 10 * 60 * 1000;      // чаще незачем: витрина обновляется раз в день
   let busy = false;
   const quiet = async () => {
     if (busy || document.hidden) return;
     if (Date.now() - (state.lastFetch || 0) < QUIET) return;
+    // человек держит открытое окно, печатает или ждёт подтверждения разбора 1С —
+    // обновимся в следующий раз, а не из-под его рук
+    if (appBusy() || importPending()) return;
     busy = true;
     try {
       if (state.session) { if (await recheckAccess(true) === 'ok') state.lastFetch = Date.now(); }
@@ -58,17 +57,25 @@ export function watchAccess({ now = false } = {}) {
     if (busy || !state.session) return;
     busy = true;
     let verdict = 'later';
-    try { verdict = await recheckAccess(); } catch (e) { verdict = 'later'; }
+    try { verdict = await recheckAccess(false, !appBusy() && !importPending()); } catch (e) { verdict = 'later'; }
     busy = false;
     if (verdict === 'revoked') {
+      /* Закрытое уже убрано из памяти самой проверкой, поэтому страницу НЕ
+         перезагружаем: выдёргивать её из-под человека незачем, достаточно
+         перерисовать и подгрузить открытую витрину. */
       stop();
+      state.sessionWarning = '';
       toast('Пароль каталога сменили — войди заново');
-      setTimeout(() => location.reload(), 2500);
+      renderAll();
+      refresh({ silent: true }).catch(() => {});
       return;
     }
     if (verdict === 'ok' && !state.catalogNeedsRefresh) { stop(); state.sessionWarning = ''; renderAll(); return; }
-    /* Связи нет. Теперь — и только теперь — говорим человеку, что данные
-       сохранённые: на обычном запуске такую надпись показывать незачем. */
+    /* Человек сейчас работает руками — перечитывание отложено, и это не повод
+       что-то ему сообщать: вернёмся через несколько секунд. */
+    if (verdict === 'busy') { timer = setTimeout(run, 5000); return; }
+    /* Связи нет. Теперь — и только теперь — говорим, что данные сохранённые:
+       на обычном запуске такую надпись показывать незачем. */
     if (!state.sessionWarning) {
       state.sessionWarning = 'Показана сохранённая копия: интернет пока не отдал свежие данные. Вход сохранён — как только связь появится, каталог обновится сам.';
       renderAll();

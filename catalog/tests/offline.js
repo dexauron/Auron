@@ -80,7 +80,7 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
   const app = fs.readFileSync(path.join(__dirname, '..', 'js', 'modules', 'app.js'), 'utf8');
   chk(/controllerchange/.test(app) && /location\.reload\(\)/.test(app),
     'когда новая версия взяла управление, страница один раз перезагружается сама');
-  chk(/busyNow\(\)/.test(app) && /pendingReload/.test(app),
+  chk(/appBusy\(\)/.test(app) && /pendingReload/.test(app),
     'но не под руками: если человек печатает или открыл окно, обновление ждёт');
   const boot = fs.readFileSync(path.join(__dirname, '..', 'js', 'boot.js'), 'utf8');
   chk(/visibilitychange/.test(boot) && /reg\.update\(\)/.test(boot),

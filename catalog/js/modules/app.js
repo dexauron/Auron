@@ -1,7 +1,7 @@
 // Связывание всего вместе и запуск
 
 import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
-import { addBackButtons, closeSheet, enableSwipeToClose, logError, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
+import { addBackButtons, appBusy, closeSheet, enableSwipeToClose, logError, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
 import { buildIndex, daysAgoISO, packText, parseScaleBarcode, productCategory, scoreProduct, todayISO, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
 import { addRecentQuery, choosePick, clearAllFilters, closeLightbox, deviceId, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderGrid, renderRecent, showSkeleton, switchTab, toggleFav, toggleTheme } from './render.js';
@@ -14,7 +14,8 @@ import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompSt
 import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, findProductPhoto, isOwner, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
 import { applyBrand } from './brand.js';
-import { IMPORT_ORDER, checkShowcaseFresh, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
+import { IMPORT_ORDER, checkShowcaseFresh, downloadMissing, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
+import { refresh } from './showcase.js';
 import { bindScanResult, findByBarcode, scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, sendOrderToSupplier, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
@@ -292,21 +293,15 @@ function bindEvents() {
   // Присваиваем внешней переменной: switchTab живёт вне bindEvents.
   ui.openAdminOrLogin = function () {
     if (state.session) {
-      // Бесплатный режим: две роли — владелец и сотрудник. Подпись человеческая,
-      // без служебных слов вроде «owner» (раньше они попадали на экран).
-      let roleName, roleHint;
-      if (state.serverless) {
-        roleName = state.isAdmin ? 'Владелец' : 'Сотрудник магазина';
-        roleHint = state.isAdmin
-          ? 'Полный доступ: правка, загрузка файлов, публикация'
-          : 'Виден весь каталог, цены и продажи — без правки';
-      } else {
-        roleName = { admin: 'Главный администратор', manager: 'Аналитик / зал' }[state.role] || 'Сотрудник';
-        roleHint = {
-          admin: state.session.user?.email || '',
-          manager: 'Вход выполнен — цены, контакты и аналитика открыты',
-        }[state.role] || 'Вход выполнен';
-      }
+      /* Ролей две: владелец и сотрудник, и подпись человеческая — без
+         служебных слов вроде «owner» (раньше они попадали на экран). Прежние
+         «Главный администратор» и «Аналитик / зал» остались от сервера, где
+         роли выдавались аккаунтом; сервера нет с августа 2026, и та ветка не
+         могла выполниться. Убрана. */
+      const roleName = state.isAdmin ? 'Владелец' : 'Сотрудник магазина';
+      const roleHint = state.isAdmin
+        ? 'Полный доступ: правка, загрузка файлов, публикация'
+        : 'Виден весь каталог, цены и продажи — без правки';
       $('menuTitle').textContent = roleName;
       $('adminEmail').textContent = roleHint;
       $('menuAdminOnly').hidden = !state.isAdmin;
@@ -315,17 +310,12 @@ function bindEvents() {
       setRowText('menuSortCats', noCat
         ? `Разложить по категориям (${noCat} в «Прочем»)`
         : 'Разложить по категориям — всё разложено');
-      // Бесплатный режим: серверные функции скрываем — они работали только с сервером
-      if (state.serverless) {
-        $('menuSuppliers').hidden = true;
-        $('menuDedup').hidden = true;
-      } else {
-      }
+      // Серверные пункты меню скрыты навсегда: они работали только с сервером
+      $('menuSuppliers').hidden = true;
+      $('menuDedup').hidden = true;
       renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
       renderReviewsBadge();   // сколько отзывов уже опубликовано
       openSheet('adminMenuSheet');
-      if (!state.serverless) {
-      }
     } else {
       openLogin();
     }
@@ -1062,16 +1052,8 @@ async function init() {
     let swReloaded = false;
     /* Перезагружать страницу под руками у человека нельзя: он может печатать
        заказ или искать товар — всё введённое пропадёт. Поэтому если он сейчас
-       работает (открыто окно, курсор в поле, что-то набрано в поиске),
+       работает (appBusy: открыто окно, курсор в поле, что-то набрано в поиске),
        обновление ждёт: страница обновится, когда каталог свернут или закрыт. */
-    const busyNow = () => {
-      try {
-        if (document.querySelector('.sheet-backdrop:not([hidden])')) return true;
-        const a = document.activeElement;
-        if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return true;
-        return !!($('searchInput') && $('searchInput').value.trim());
-      } catch (e) { return false; }
-    };
     let pendingReload = false;
     document.addEventListener('visibilitychange', () => {
       if (pendingReload && document.hidden) location.reload();
@@ -1079,7 +1061,7 @@ async function init() {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!hadController || swReloaded) return;
       swReloaded = true;
-      if (busyNow()) { pendingReload = true; toast('Новая версия готова — обновится, когда закончишь'); return; }
+      if (appBusy()) { pendingReload = true; toast('Новая версия готова — обновится, когда закончишь'); return; }
       location.reload();
     });
   }
