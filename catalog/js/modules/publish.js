@@ -385,8 +385,11 @@ async function openCatalog(password) {
     if (await fetchRaw(ROLE_FILES.owner.manifest) != null || await fetchRaw(ROLE_FILES.staff.manifest) != null) throw new Error('INVALID_CATALOG');
     return openLegacy(password);
   }
-  const ks = JSON.parse(keysRaw);
-  if (![3, 4].includes(ks.v)) throw new Error('INVALID_CATALOG');
+  // Обрывок вместо файла (недокачался) — это «каталог не прочитан», а не сбой
+  // разбора: иначе человек видел бы вместо объяснения служебное сообщение.
+  let ks;
+  try { ks = JSON.parse(keysRaw); } catch (e) { throw new Error('INVALID_CATALOG'); }
+  if (!ks || ![3, 4].includes(ks.v)) throw new Error('INVALID_CATALOG');
   let raw = null; let role = null;
   for (const r of ROLES) {
     if (!ks[r]) continue;
@@ -507,7 +510,13 @@ async function catalogFiles(password, rotate) {
 
 export async function publishFull(password, { onProgress = null, rotate = false } = {}) {
   if (!state.isAdmin) throw new Error('FORBIDDEN');
-  if (_cat?.version === 4 && (!_cat.keys || !_cat.mani)) throw new Error('Показана сохранённая копия. Перед публикацией открой каталог заново при стабильном интернете.');
+  /* Запуск поднимает вход из копии на устройстве, поэтому в первые секунды
+     описи ещё нет — это нормально, а не повод гнать человека перезагружать
+     страницу. Пробуем дочитать каталог сейчас; не вышло — тогда отказ. */
+  if (_cat?.version === 4 && (!_cat.keys || !_cat.mani)) {
+    await recheckAccess().catch(() => {});
+    if (_cat?.version === 4 && (!_cat.keys || !_cat.mani)) throw new Error('Показана сохранённая копия. Перед публикацией открой каталог заново при стабильном интернете.');
+  }
   const prevIdx = await loadPubIndex();
   const { files, index } = await showcaseFiles(prevIdx);
   files.push({ path: `${CFG.DATA_PATH}/${INDEX_FILE}`, content: JSON.stringify(index) });
@@ -783,7 +792,15 @@ function dropSessionState() {
  *   'revoked' — пароль сменили, вход снят (приложение сообщит и перезапустится)
  *   'ok'      — доступ в силе; если удалось дочитать каталог, он уже свежий
  *   'later'   — связи по-прежнему нет, попробуем позже */
-export async function recheckAccess(force = false, allowRead = true) {
+let recheckWork = null;
+export function recheckAccess(force = false, allowRead = true) {
+  // Проверку зовут два наблюдателя (запуск и возврат в каталог). Если они
+  // совпали, второй ждёт первую, а не качает и расшифровывает всё повторно.
+  if (recheckWork) return recheckWork;
+  recheckWork = doRecheck(force, allowRead).finally(() => { recheckWork = null; });
+  return recheckWork;
+}
+async function doRecheck(force, allowRead) {
   const active = _cat;
   if (!active || !active.tag || !ROLES.includes(active.role) || active.version !== 4) return 'ok';
   let keys;
@@ -804,7 +821,7 @@ export async function recheckAccess(force = false, allowRead = true) {
   /* Подменять каталог под руками человека нельзя: он может держать открытой
      карточку, набирать заказ или ждать подтверждения разбора 1С. Проверку
      отзыва это не отменяет — она уже прошла выше, — а перечитывание отложим. */
-  if ((!active.mani || force) && !allowRead) return 'later';
+  if ((!active.mani || force) && !allowRead) return 'busy';
   if (!active.mani || force) {
     /* Доступ в силе — дочитываем настоящий каталог, чтобы владелец мог
        публиковать без перезагрузки страницы. */

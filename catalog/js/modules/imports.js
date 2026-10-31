@@ -529,25 +529,6 @@ function parsePriceReport(rows) {
   return byKey;
 }
 
-// второй файл: пары «товар — штрихкод», добавляем штрихкоды к товарам из первого
-function mergeBarcodesReport(rows, byKey) {
-  const det = detectColumns(rows);
-  if (!det) throw new Error('Не нашёл строку заголовков в файле 2');
-  const { cols, dataStart } = det;
-  const byName = new Map();
-  for (const item of byKey.values()) { const n = norm(item.name); byName.set(n, byName.has(n) ? null : item); }
-  let added = 0;
-  for (let r = dataStart; r < rows.length; r++) {
-    const row = rows[r];
-    const bc = cols.barcode !== undefined ? cellStr(row[cols.barcode]) : '';
-    if (!bc) continue;
-    const code = cols.code !== undefined ? normCode(row[cols.code]) : '';
-    const name = cellStr(row[cols.name]);
-    const item = code ? byKey.get(code) : byName.get(norm(name));
-    if (item && !item.barcodes.has(bc)) { item.barcodes.add(bc); added++; }
-  }
-  return added;
-}
 
 // Прайс-лист розничных цен из 1С: колонка «Номенклатура» + «Розничный тип
 // цен» (розничная цена). Товары сгруппированы строками-заголовками (у них нет
@@ -792,16 +773,6 @@ export async function smartPick(files) {
       else if (entry.type === 'units') { entry.parsed = parseUnitsReport(rows); entry.count = entry.parsed.recs.length; }
     } catch (e) { entry.error = e.message || String(e); }
     ui.smartEntries.push(entry);
-  }
-  // На сервере штрихкоды умеют грузиться только «в довесок» к файлу цен —
-  // приклеиваем. В бесплатном режиме это отдельный полноценный файл.
-  if (!state.serverless) {
-    const priceEntry = ui.smartEntries.find((e) => e.type === 'prices' && e.byKey);
-    for (const e of ui.smartEntries) {
-      if (e.type === 'barcodes' && priceEntry && e.rows) {
-        try { e.count = mergeBarcodesReport(e.rows, priceEntry.byKey); e.mergedInto = priceEntry.name; } catch (er) { e.error = er.message; }
-      }
-    }
   }
   renderSmartList();
   smartLog('');
