@@ -65,14 +65,22 @@ export function watchAccess({ now = false } = {}) {
     try { verdict = await recheckAccess(false, !appBusy() && !importPending()); } catch (e) { verdict = 'later'; }
     busy = false;
     if (verdict === 'revoked') {
+      /* Закрытое уже убрано из памяти самой проверкой, поэтому страницу НЕ
+         перезагружаем: выдёргивать её из-под человека незачем, достаточно
+         перерисовать и подгрузить открытую витрину. */
       stop();
+      state.sessionWarning = '';
       toast('Пароль каталога сменили — войди заново');
-      setTimeout(() => location.reload(), 2500);
+      renderAll();
+      refresh({ silent: true }).catch(() => {});
       return;
     }
     if (verdict === 'ok' && !state.catalogNeedsRefresh) { stop(); state.sessionWarning = ''; renderAll(); return; }
-    /* Связи нет. Теперь — и только теперь — говорим человеку, что данные
-       сохранённые: на обычном запуске такую надпись показывать незачем. */
+    /* Человек сейчас работает руками — перечитывание отложено, и это не повод
+       что-то ему сообщать: вернёмся через несколько секунд. */
+    if (verdict === 'busy') { timer = setTimeout(run, 5000); return; }
+    /* Связи нет. Теперь — и только теперь — говорим, что данные сохранённые:
+       на обычном запуске такую надпись показывать незачем. */
     if (!state.sessionWarning) {
       state.sessionWarning = 'Показана сохранённая копия: интернет пока не отдал свежие данные. Вход сохранён — как только связь появится, каталог обновится сам.';
       renderAll();

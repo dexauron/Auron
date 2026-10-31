@@ -508,7 +508,16 @@ export function renderAll() {
   renderPickLists();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
-  if (state.sessionWarning) { $('offlineBanner').textContent = state.sessionWarning; $('offlineBanner').hidden = false; }
+  /* Полоса сверху одна на двоих: её ставит и сообщение про сохранённую копию
+     (sessionWarning), и «нет связи» при загрузке витрины. Поэтому прячем
+     только СВОЁ сообщение — пометкой data-from. Без неё полоса оставалась
+     висеть со старым текстом и после того, как данные уже обновились. */
+  const warn = $('offlineBanner');
+  if (state.sessionWarning) {
+    warn.textContent = state.sessionWarning; warn.hidden = false; warn.dataset.from = 'session';
+  } else if (warn.dataset.from === 'session') {
+    warn.hidden = true; warn.dataset.from = '';
+  }
   window.dispatchEvent(new Event('wm:ready'));
 }
 
