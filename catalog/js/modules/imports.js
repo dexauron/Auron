@@ -1,12 +1,12 @@
 // Импорт из 1С: разбор файлов и слияние в каталог
 
 import { $, CFG, state, ui } from './store.js';
-import { esc, logError, netFetch, norm, toast, cmpRu } from './core.js';
+import { esc, logError, norm, toast, cmpRu } from './core.js';
 import { ic } from './icons.js';
 import { buildIndex, fmtNum } from './catalog.js';
 import { renderAll } from './render.js';
 
-import { byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js';
+import { byName, tidyMemory } from './data.js';
 import { buildPopularIds, publishFull, SHOWCASE_V } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
 import { plural } from './competitors.js';
@@ -332,125 +332,14 @@ export function svImportRows(rows) {
   return type;
 }
 
-// Публичная витрина: части p/*.json с подписями из index.json. Неизменённые
-// части берутся из кэша; без описи поддерживается прежний products.json.
-// Закрытые данные покупатель из этих файлов не получает.
-async function fetchShowcase(base, onChunk) {
-  const idx = await netFetch(base + 'index.json', { cache: 'no-cache' }).catch(() => null);
-  if (idx && idx.ok) {
-    const meta = await idx.json().catch(() => null);
-    if (meta && meta.v === 2 && Array.isArray(meta.parts)) {
-      state.showcaseApp = Number(meta.app) || 1;   // чем собрана витрина
-      /* Когда владелец её опубликовал. Он выгружает из 1С и публикует раз в
-         день, поэтому это и есть ответ на вопрос покупателя «а данные-то
-         свежие?». Показываем честно: пусть человек сам решит, доверять ли
-         наличию, которому сутки. */
-      state.showcaseAt = String(meta.savedAt || '');
-      const chunks = [];
-      // Куски показываем ПО МЕРЕ ПРИХОДА, а не после последнего: каталог на
-      // 17 тысяч товаров — это несколько мегабайт, и ждать их целиком перед
-      // первой картинкой в зале слишком долго.
-      await Promise.all(meta.parts.map(async (h, i) => {
-        const r = await netFetch(`${base}p/${String(i).padStart(2, '0')}.json?h=${h}`).catch(() => null);
-        chunks[i] = (r && r.ok) ? await r.json().catch(() => []) : [];
-        if (onChunk) onChunk(chunks[i]);
-      }));
-      return [].concat(...chunks);
-    }
-  }
-  const pr = await netFetch(base + 'products.json', { cache: 'no-cache' });
-  return pr.json();
-}
-
-/* Показ по мере загрузки. Полная пересборка поискового индекса на 17 тысячах
- * товаров стоит заметного времени, поэтому делаем её не чаще раза в полсекунды,
- * а в конце — обязательно. Так первые товары видны почти сразу, а телефон не
- * захлёбывается перерисовками. */
-function progressiveShow() {
-  let last = 0;
-  const acc = [];
-  return {
-    add(list) {
-      if (!list || !list.length) return;
-      acc.push(...list);
-      const now = Date.now();
-      if (now - last < 500) return;
-      last = now;
-      state.products = acc.slice().sort(byName);
-      buildIndex();
-      $('loader').hidden = true;
-      renderAll();
-    },
-  };
-}
-
-async function refreshStatic({ progressive = false } = {}) {
-  try {
-    const base = CFG.STATIC_URL.endsWith('/') ? CFG.STATIC_URL : CFG.STATIC_URL + '/';
-    const show = progressive ? progressiveShow() : null;
-    // Цены чужих магазинов больше не качаем: покупателю они не показываются,
-    // а вошедший сотрудник берёт их из своего зашифрованного каталога.
-    const [products, gr, pop] = await Promise.all([
-      fetchShowcase(base, show ? (list) => show.add(list) : null),
-      netFetch(base + 'groups.json', { cache: 'no-cache' }).catch(() => null),
-      netFetch(base + 'popular.json', { cache: 'no-cache' }).catch(() => null),
-    ]);
-    if (!Array.isArray(products)) return false;
-    state.groups = (gr && gr.ok) ? await gr.json() : [];
-    try { state.popularIds = (pop && pop.ok) ? await pop.json() : []; } catch (e) { state.popularIds = []; }
-    state.competitors = []; state.compPrices = []; // разведка цен — только для вошедших
-    state.suppliers = []; // покупателю поставщики не нужны (и в файле их нет)
-    state.products = sortByName(products);
-    buildIndex();
-    state.syncMax = '';
-    state.lastFetch = Date.now();
-    saveCache();
-    $('offlineBanner').hidden = true;
-    $('loader').hidden = true;
-    renderAll();
-    return true;
-  } catch (e) {
-    return false; // любой сбой — откат на загрузку с сервера
-  }
-}
-
-export async function refresh({ silent = false } = {}) {
-  // серверлес: данные уже в памяти (расшифрованный каталог), сервера нет
-  if (state.serverless) { renderAll(); return; }
-  // Покупатель без входа и включённый STATIC_URL → читаем витрину из файла.
-  // Не удалось (файла ещё нет / ошибка) — падаем на обычную загрузку с сервера.
-  // Сотрудник после входа всегда грузится с сервера (полные данные).
-  if (CFG.STATIC_URL && !state.session) {
-    // Сохранённая копия с телефона уже показана при запуске (init). Если её
-    // нет — это первый заход, и тогда показываем товары ПО МЕРЕ ЗАГРУЗКИ, не
-    // дожидаясь последнего куска: иначе человек смотрит на пустой экран,
-    // пока качаются мегабайты.
-    const cached = state.products.length > 0;
-    if (await refreshStatic({ progressive: !cached })) return;
-    if (cached) {                       // сеть не ответила, но каталог показан
-      const b = $('offlineBanner');
-      b.textContent = 'Нет связи. Показан сохранённый каталог';
-      b.hidden = false;
-      return;
-    }
-  }
-  // Магазин без базы (бесплатный режим): к серверу идти не к кому. Витрина не
-  // загрузилась — значит нет интернета: показываем сохранённое и говорим об этом.
-  $('loader').hidden = true;
-  const banner = $('offlineBanner');
-  banner.textContent = (await loadCache())
-    ? 'Нет связи. Показан сохранённый каталог'
-    : 'Нет интернета. Подключись к сети и обнови страницу';
-  banner.hidden = false;
-  renderAll();
-}
-
 /* ── Импорт из 1С (Excel) ─────────────────────────
  * Файл 1 — отчёт «Цены поставщиков»: товары, коды, группы, поставщики, ед.изм.
  * Файл 2 (не обязателен) — отчёт «Штрихкоды номенклатуры»: все штрихкоды.
  * Товары объединяются по «Код товара»; существующие обновляются, фото сохраняются. */
 
 let impParsed = null; // результат разбора файлов, ждёт подтверждения
+// пока разбор ждёт «Применить», каталог под человеком подменять нельзя
+export const importPending = () => impParsed != null;
 
 /* Разборщик Excel лежит РЯДОМ, а не на чужом сайте: загрузка файлов должна
  * работать и без интернета (телефон в подсобке), и там, где чужие адреса
@@ -640,25 +529,6 @@ function parsePriceReport(rows) {
   return byKey;
 }
 
-// второй файл: пары «товар — штрихкод», добавляем штрихкоды к товарам из первого
-function mergeBarcodesReport(rows, byKey) {
-  const det = detectColumns(rows);
-  if (!det) throw new Error('Не нашёл строку заголовков в файле 2');
-  const { cols, dataStart } = det;
-  const byName = new Map();
-  for (const item of byKey.values()) { const n = norm(item.name); byName.set(n, byName.has(n) ? null : item); }
-  let added = 0;
-  for (let r = dataStart; r < rows.length; r++) {
-    const row = rows[r];
-    const bc = cols.barcode !== undefined ? cellStr(row[cols.barcode]) : '';
-    if (!bc) continue;
-    const code = cols.code !== undefined ? normCode(row[cols.code]) : '';
-    const name = cellStr(row[cols.name]);
-    const item = code ? byKey.get(code) : byName.get(norm(name));
-    if (item && !item.barcodes.has(bc)) { item.barcodes.add(bc); added++; }
-  }
-  return added;
-}
 
 // Прайс-лист розничных цен из 1С: колонка «Номенклатура» + «Розничный тип
 // цен» (розничная цена). Товары сгруппированы строками-заголовками (у них нет
@@ -903,16 +773,6 @@ export async function smartPick(files) {
       else if (entry.type === 'units') { entry.parsed = parseUnitsReport(rows); entry.count = entry.parsed.recs.length; }
     } catch (e) { entry.error = e.message || String(e); }
     ui.smartEntries.push(entry);
-  }
-  // На сервере штрихкоды умеют грузиться только «в довесок» к файлу цен —
-  // приклеиваем. В бесплатном режиме это отдельный полноценный файл.
-  if (!state.serverless) {
-    const priceEntry = ui.smartEntries.find((e) => e.type === 'prices' && e.byKey);
-    for (const e of ui.smartEntries) {
-      if (e.type === 'barcodes' && priceEntry && e.rows) {
-        try { e.count = mergeBarcodesReport(e.rows, priceEntry.byKey); e.mergedInto = priceEntry.name; } catch (er) { e.error = er.message; }
-      }
-    }
   }
   renderSmartList();
   smartLog('');

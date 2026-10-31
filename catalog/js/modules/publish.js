@@ -385,8 +385,11 @@ async function openCatalog(password) {
     if (await fetchRaw(ROLE_FILES.owner.manifest) != null || await fetchRaw(ROLE_FILES.staff.manifest) != null) throw new Error('INVALID_CATALOG');
     return openLegacy(password);
   }
-  const ks = JSON.parse(keysRaw);
-  if (![3, 4].includes(ks.v)) throw new Error('INVALID_CATALOG');
+  // Обрывок вместо файла (недокачался) — это «каталог не прочитан», а не сбой
+  // разбора: иначе человек видел бы вместо объяснения служебное сообщение.
+  let ks;
+  try { ks = JSON.parse(keysRaw); } catch (e) { throw new Error('INVALID_CATALOG'); }
+  if (!ks || ![3, 4].includes(ks.v)) throw new Error('INVALID_CATALOG');
   let raw = null; let role = null;
   for (const r of ROLES) {
     if (!ks[r]) continue;
@@ -397,10 +400,15 @@ async function openCatalog(password) {
   // Старый общий ключ не выдаём сотруднику: сначала владелец публикует v4.
   if (ks.v === 3 && role === 'staff') throw new Error('SECURITY_UPGRADE_REQUIRED');
   const key = await importCatalogKey(raw);
+  /* Подпись конвертика роли — ею потом проверяют, не сменили ли пароль, и по
+     ней же кэшируются куски. Без неё фоновая проверка после входа ПАРОЛЕМ
+     молча считала, что проверять нечего, и свежие данные приходили только
+     после перезапуска приложения. */
+  const tag = await digest(JSON.stringify(ks[role]));
   let mani, data;
-  try { ({ mani, data } = await readRoleCatalog(key, role, ks.v, false, await digest(JSON.stringify(ks[role])))); }
+  try { ({ mani, data } = await readRoleCatalog(key, role, ks.v, false, tag)); }
   catch (e) { e.passwordAccepted = true; throw e; }
-  _cat = { version: ks.v, key, role, mani, keys: ks, staff: null, staffPassword: data.staffPassword || null };
+  _cat = { version: ks.v, key, role, mani, keys: ks, tag, staff: null, staffPassword: data.staffPassword || null };
   state.securityNeedsUpgrade = ks.v !== 4;
   return { data, role };
 }
@@ -507,7 +515,13 @@ async function catalogFiles(password, rotate) {
 
 export async function publishFull(password, { onProgress = null, rotate = false } = {}) {
   if (!state.isAdmin) throw new Error('FORBIDDEN');
-  if (_cat?.version === 4 && (!_cat.keys || !_cat.mani)) throw new Error('Показана сохранённая копия. Перед публикацией открой каталог заново при стабильном интернете.');
+  /* Запуск поднимает вход из копии на устройстве, поэтому в первые секунды
+     описи ещё нет — это нормально, а не повод гнать человека перезагружать
+     страницу. Пробуем дочитать каталог сейчас; не вышло — тогда отказ. */
+  if (_cat?.version === 4 && (!_cat.keys || !_cat.mani)) {
+    await recheckAccess().catch(() => {});
+    if (_cat?.version === 4 && (!_cat.keys || !_cat.mani)) throw new Error('Показана сохранённая копия. Перед публикацией открой каталог заново при стабильном интернете.');
+  }
   const prevIdx = await loadPubIndex();
   const { files, index } = await showcaseFiles(prevIdx);
   files.push({ path: `${CFG.DATA_PATH}/${INDEX_FILE}`, content: JSON.stringify(index) });
@@ -777,13 +791,29 @@ function dropSessionState() {
   buildIndex();
 }
 
-/* Повторная проверка доступа после входа из сохранённой копии: отозван ли
- * пароль и не пора ли подтянуть свежий каталог. Зовётся из app.js, когда
- * появляется связь. Возвращает:
- *   'revoked' — пароль сменили, вход снят (приложение сообщит и перезапустится)
- *   'ok'      — доступ в силе; если удалось дочитать каталог, он уже свежий
- *   'later'   — связи по-прежнему нет, попробуем позже */
-export async function recheckAccess(force = false) {
+/* Повторная проверка доступа: отозван ли пароль и не пора ли подтянуть свежий
+ * каталог. Зовут её наблюдатели из session.js — сразу после запуска и при
+ * возврате в каталог. Возвращает:
+ *   'revoked' — пароль сменили: вход снят, закрытое убрано из памяти
+ *   'ok'      — доступ в силе; если каталог дочитан, он уже свежий
+ *   'busy'    — человек работает руками, перечитывание отложено
+ *   'later'   — связи нет, попробуем позже */
+let recheckWork = null, recheckReads = false;
+function startRecheck(force, allowRead) {
+  recheckReads = allowRead;
+  recheckWork = doRecheck(force, allowRead).finally(() => { recheckWork = null; recheckReads = false; });
+  return recheckWork;
+}
+export function recheckAccess(force = false, allowRead = true) {
+  /* Проверку зовут наблюдатели и публикация. Совпали — делаем одну работу
+     вместо двух. Но «отложенную» проверку (которая каталог не читает) нельзя
+     отдать тому, кому чтение нужно: публикация решила бы, что каталог
+     прочитать не удалось, и отказала бы при живом интернете. */
+  if (recheckWork && (recheckReads || !allowRead)) return recheckWork;
+  if (recheckWork) return recheckWork.then(() => startRecheck(force, allowRead));
+  return startRecheck(force, allowRead);
+}
+async function doRecheck(force, allowRead) {
   const active = _cat;
   if (!active || !active.tag || !ROLES.includes(active.role) || active.version !== 4) return 'ok';
   let keys;
@@ -801,6 +831,10 @@ export async function recheckAccess(force = false) {
     await clearSvAuth();
     return 'revoked';
   }
+  /* Подменять каталог под руками человека нельзя: он может держать открытой
+     карточку, набирать заказ или ждать подтверждения разбора 1С. Проверку
+     отзыва это не отменяет — она уже прошла выше, — а перечитывание отложим. */
+  if ((!active.mani || force) && !allowRead) return 'busy';
   if (!active.mani || force) {
     /* Доступ в силе — дочитываем настоящий каталог, чтобы владелец мог
        публиковать без перезагрузки страницы. */
@@ -832,7 +866,6 @@ export function applyServerless(pw) {
   state.isAdmin = true; state.role = 'admin'; state.canPurchase = true; state.canSales = true;
   saveSvAuth();
   $('adminBtn').classList.toggle('is-admin', true);
-  $('adminBtnLabel').hidden = true;
   saveCache();
   renderAll();
   // При входе ничего не удаляем автоматически по имени или штрихкоду.
@@ -847,7 +880,6 @@ export function applyStaff(pw) {
   state.isAdmin = false; state.role = 'staff'; state.canPurchase = true; state.canSales = true;
   saveSvAuth();
   $('adminBtn').classList.toggle('is-admin', true);
-  $('adminBtnLabel').hidden = true;
   saveCache();
   renderAll();
 }

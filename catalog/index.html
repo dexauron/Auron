@@ -40,7 +40,11 @@
         </button>
         <button class="icon-btn" id="adminBtn" title="Вход для сотрудников и администратора">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
-          <span id="adminBtnLabel">Войти</span>
+          <!-- Подпись и гостевые блоки СПРЯТАНЫ в разметке нарочно: пока приложение
+               не подняло вход, оно не знает, кто перед ним, а показывать «Войти»
+               вошедшему владельцу нельзя — он это видел и просил убрать. Их
+               открывает syncControls, когда роль уже известна. -->
+          <span id="adminBtnLabel" hidden>Войти</span>
         </button>
       </div>
     </div>
@@ -234,7 +238,7 @@
       <span class="tab-ico"><i data-ic="truck"></i></span><span class="tab-txt">Работа</span>
       <span class="tab-badge" id="tabWorkCount" hidden></span>
     </button>
-    <button class="tab guest-only" data-tab="store">
+    <button class="tab guest-only" data-tab="store" hidden>
       <span class="tab-ico"><i data-ic="store"></i></span><span class="tab-txt">Магазин</span>
       <span class="tab-badge" id="tabStoreCount" hidden></span>
     </button>
@@ -271,8 +275,8 @@
         <button class="btn btn-secondary btn-block guest-only" id="btnWait" hidden>Сообщить, когда появится</button>
         <div class="sheet-actions">
           <button class="btn btn-secondary purchase-only" id="btnCompareAdd">К сравнению</button>
-          <button class="btn btn-secondary guest-only" id="btnRate">Оценить товар</button>
-          <button class="btn btn-secondary guest-only" id="btnReportPrice">Дешевле в другом магазине</button>
+          <button class="btn btn-secondary guest-only" id="btnRate" hidden>Оценить товар</button>
+          <button class="btn btn-secondary guest-only" id="btnReportPrice" hidden>Дешевле в другом магазине</button>
           <button class="btn btn-secondary" id="btnShareProduct">Поделиться</button>
         </div>
         <div id="sheetSimilar"></div>

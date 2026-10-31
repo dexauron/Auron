@@ -427,6 +427,8 @@ function syncControls() {
      магазине») его вешать нельзя: иначе они показываются всегда, даже
      пустыми — так на экране однажды повисла пустая белая полоса. */
   document.querySelectorAll('.guest-only').forEach((el) => { el.hidden = !!state.session; });
+  // подпись «Войти» у кнопки входа: показываем только тому, кто не вошёл
+  $('adminBtnLabel').hidden = !!state.session;
   if (ui.applyGuestMode) ui.applyGuestMode();   // класс «покупатель» на странице
   if (ui.renderShopBar) ui.renderShopBar();     // полоска «сколько выйдет»
   document.querySelectorAll('.purchase-only').forEach((el) => { el.hidden = !state.canPurchase; });
@@ -508,7 +510,16 @@ export function renderAll() {
   renderPickLists();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
-  if (state.sessionWarning) { $('offlineBanner').textContent = state.sessionWarning; $('offlineBanner').hidden = false; }
+  /* Полоса сверху одна на двоих: её ставит и сообщение про сохранённую копию
+     (sessionWarning), и «нет связи» при загрузке витрины. Поэтому прячем
+     только СВОЁ сообщение — пометкой data-from. Без неё полоса оставалась
+     висеть со старым текстом и после того, как данные уже обновились. */
+  const warn = $('offlineBanner');
+  if (state.sessionWarning) {
+    warn.textContent = state.sessionWarning; warn.hidden = false; warn.dataset.from = 'session';
+  } else if (warn.dataset.from === 'session') {
+    warn.hidden = true; warn.dataset.from = '';
+  }
   window.dispatchEvent(new Event('wm:ready'));
 }
 

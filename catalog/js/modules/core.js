@@ -269,8 +269,20 @@ export function watchErrors() {
   window.addEventListener('unhandledrejection', (e) => logError('фоновая задача', e.reason));
 }
 
-/* Обёртка для действий, которые не должны ронять приложение целиком:
- * отрисовка, обработчики кнопок, фоновые задачи. */
+/* Человек сейчас работает руками: открыто окно, курсор в поле, что-то набрано
+ * в поиске. Под такими руками нельзя ни перезагружать страницу, ни подменять
+ * каталог под пальцами — набранное и несохранённое пропадёт. Проверкой
+ * пользуются обновление версии приложения и тихое обновление данных. */
+export function appBusy() {
+  try {
+    if (document.querySelector('.sheet-backdrop:not([hidden])')) return true;
+    const a = document.activeElement;
+    if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return true;
+    const q = document.getElementById('searchInput');
+    return !!(q && q.value.trim());
+  } catch (e) { return false; }
+}
+
 /* Запрос с крайним сроком. Без него «очень плохой интернет» выглядит не как
  * ошибка, а как вечное ожидание: соединение открыто, ответа нет, и обновление
  * каталога не заканчивается никогда. По сроку мы просто отступаем — на экране
@@ -283,6 +295,8 @@ export function netFetch(url, opts = {}) {
   return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
 }
 
+/* Обёртка для действий, которые не должны ронять приложение целиком:
+ * отрисовка, обработчики кнопок, фоновые задачи. */
 export function safely(where, fn) {
   return (...args) => {
     try {

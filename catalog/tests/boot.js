@@ -160,6 +160,22 @@ async function watch(page, ms = 8000) {
       `правка с другого устройства подхватилась сама (${picked.verdict}, «${picked.name}»)`);
     chk(!picked.warn, 'и предупреждение «показана сохранённая копия» снято');
 
+    // ── 4. Полоса «показана сохранённая копия» умеет исчезать ──
+    /* Найдено аудитом: полосу сверху ставили, но никогда не убирали. Человек
+       открывал каталог без связи, видел надпись — и она висела со старым
+       текстом даже после того, как данные уже обновились. */
+    const banner = await page.evaluate(async () => {
+      const P = window.WM_PUBLISH, S = P._state();
+      S.sessionWarning = 'Показана сохранённая копия: интернет пока не отдал свежие данные.';
+      P.renderAll();
+      const shown = !document.getElementById('offlineBanner').hidden;
+      S.sessionWarning = '';
+      P.renderAll();
+      return { shown, hiddenAfter: document.getElementById('offlineBanner').hidden };
+    });
+    chk(banner.shown && banner.hiddenAfter,
+      `полоса появляется по причине и исчезает вместе с ней (была видна: ${banner.shown}, спряталась: ${banner.hiddenAfter})`);
+
     chk(!errs.length, `нет сбоев JS (${errs.length ? errs.join('; ') : '0'})`);
     completed = true;
     await done(b);
