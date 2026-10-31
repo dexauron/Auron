@@ -400,10 +400,15 @@ async function openCatalog(password) {
   // Старый общий ключ не выдаём сотруднику: сначала владелец публикует v4.
   if (ks.v === 3 && role === 'staff') throw new Error('SECURITY_UPGRADE_REQUIRED');
   const key = await importCatalogKey(raw);
+  /* Подпись конвертика роли — ею потом проверяют, не сменили ли пароль, и по
+     ней же кэшируются куски. Без неё фоновая проверка после входа ПАРОЛЕМ
+     молча считала, что проверять нечего, и свежие данные приходили только
+     после перезапуска приложения. */
+  const tag = await digest(JSON.stringify(ks[role]));
   let mani, data;
-  try { ({ mani, data } = await readRoleCatalog(key, role, ks.v, false, await digest(JSON.stringify(ks[role])))); }
+  try { ({ mani, data } = await readRoleCatalog(key, role, ks.v, false, tag)); }
   catch (e) { e.passwordAccepted = true; throw e; }
-  _cat = { version: ks.v, key, role, mani, keys: ks, staff: null, staffPassword: data.staffPassword || null };
+  _cat = { version: ks.v, key, role, mani, keys: ks, tag, staff: null, staffPassword: data.staffPassword || null };
   state.securityNeedsUpgrade = ks.v !== 4;
   return { data, role };
 }
