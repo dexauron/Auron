@@ -14,7 +14,8 @@
 import { state } from './store.js';
 import { appBusy, toast } from './core.js';
 import { renderAll } from './render.js';
-import { importPending, refresh } from './imports.js';
+import { importPending } from './imports.js';
+import { refresh } from './showcase.js';
 import { recheckAccess } from './publish.js';
 
 /* Каталог стоит на домашнем экране и живёт неделями: если обновлять данные

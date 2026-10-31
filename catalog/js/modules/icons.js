@@ -1,7 +1,7 @@
 // Набор контурных значков (вместо эмодзи)
 
 import { $ } from './store.js';
-import { refresh } from './imports.js';
+import { refresh } from './showcase.js';
 
 /* ── Иконки вместо эмодзи ───────────────────────────
  * Эмодзи рисуются шрифтом системы: на Android, iPhone и Windows они разного

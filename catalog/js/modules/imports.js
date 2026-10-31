@@ -1,12 +1,12 @@
 // Импорт из 1С: разбор файлов и слияние в каталог
 
 import { $, CFG, state, ui } from './store.js';
-import { esc, logError, netFetch, norm, toast, cmpRu } from './core.js';
+import { esc, logError, norm, toast, cmpRu } from './core.js';
 import { ic } from './icons.js';
 import { buildIndex, fmtNum } from './catalog.js';
 import { renderAll } from './render.js';
 
-import { byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js';
+import { byName, saveCache, tidyMemory } from './data.js';
 import { buildPopularIds, publishFull, SHOWCASE_V } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
 import { plural } from './competitors.js';
