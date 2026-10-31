@@ -13,7 +13,7 @@
 import { $, CFG, state } from './store.js';
 import { netFetch } from './core.js';
 import { renderAll } from './render.js';
-import { loadCache, saveCache, sortByName } from './data.js';
+import { byName, loadCache, saveCache, sortByName } from './data.js';
 import { buildIndex } from './catalog.js';
 
 // Публичная витрина: части p/*.json с подписями из index.json. Неизменённые
