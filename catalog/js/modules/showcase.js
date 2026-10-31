@@ -12,10 +12,9 @@
 
 import { $, CFG, state } from './store.js';
 import { netFetch } from './core.js';
-import { buildIndex } from './catalog.js';
 import { renderAll } from './render.js';
 import { loadCache, saveCache, sortByName } from './data.js';
-import { warmSearchIndex } from './catalog.js';
+import { buildIndex } from './catalog.js';
 
 // Публичная витрина: части p/*.json с подписями из index.json. Неизменённые
 // части берутся из кэша; без описи поддерживается прежний products.json.
