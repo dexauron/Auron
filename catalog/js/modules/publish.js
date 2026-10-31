@@ -791,19 +791,27 @@ function dropSessionState() {
   buildIndex();
 }
 
-/* Повторная проверка доступа после входа из сохранённой копии: отозван ли
- * пароль и не пора ли подтянуть свежий каталог. Зовётся из app.js, когда
- * появляется связь. Возвращает:
- *   'revoked' — пароль сменили, вход снят (приложение сообщит и перезапустится)
- *   'ok'      — доступ в силе; если удалось дочитать каталог, он уже свежий
- *   'later'   — связи по-прежнему нет, попробуем позже */
-let recheckWork = null;
-export function recheckAccess(force = false, allowRead = true) {
-  // Проверку зовут два наблюдателя (запуск и возврат в каталог). Если они
-  // совпали, второй ждёт первую, а не качает и расшифровывает всё повторно.
-  if (recheckWork) return recheckWork;
-  recheckWork = doRecheck(force, allowRead).finally(() => { recheckWork = null; });
+/* Повторная проверка доступа: отозван ли пароль и не пора ли подтянуть свежий
+ * каталог. Зовут её наблюдатели из session.js — сразу после запуска и при
+ * возврате в каталог. Возвращает:
+ *   'revoked' — пароль сменили: вход снят, закрытое убрано из памяти
+ *   'ok'      — доступ в силе; если каталог дочитан, он уже свежий
+ *   'busy'    — человек работает руками, перечитывание отложено
+ *   'later'   — связи нет, попробуем позже */
+let recheckWork = null, recheckReads = false;
+function startRecheck(force, allowRead) {
+  recheckReads = allowRead;
+  recheckWork = doRecheck(force, allowRead).finally(() => { recheckWork = null; recheckReads = false; });
   return recheckWork;
+}
+export function recheckAccess(force = false, allowRead = true) {
+  /* Проверку зовут наблюдатели и публикация. Совпали — делаем одну работу
+     вместо двух. Но «отложенную» проверку (которая каталог не читает) нельзя
+     отдать тому, кому чтение нужно: публикация решила бы, что каталог
+     прочитать не удалось, и отказала бы при живом интернете. */
+  if (recheckWork && (recheckReads || !allowRead)) return recheckWork;
+  if (recheckWork) return recheckWork.then(() => startRecheck(force, allowRead));
+  return startRecheck(force, allowRead);
 }
 async function doRecheck(force, allowRead) {
   const active = _cat;
