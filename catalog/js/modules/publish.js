@@ -783,7 +783,7 @@ function dropSessionState() {
  *   'revoked' — пароль сменили, вход снят (приложение сообщит и перезапустится)
  *   'ok'      — доступ в силе; если удалось дочитать каталог, он уже свежий
  *   'later'   — связи по-прежнему нет, попробуем позже */
-export async function recheckAccess(force = false) {
+export async function recheckAccess(force = false, allowRead = true) {
   const active = _cat;
   if (!active || !active.tag || !ROLES.includes(active.role) || active.version !== 4) return 'ok';
   let keys;
@@ -801,6 +801,10 @@ export async function recheckAccess(force = false) {
     await clearSvAuth();
     return 'revoked';
   }
+  /* Подменять каталог под руками человека нельзя: он может держать открытой
+     карточку, набирать заказ или ждать подтверждения разбора 1С. Проверку
+     отзыва это не отменяет — она уже прошла выше, — а перечитывание отложим. */
+  if ((!active.mani || force) && !allowRead) return 'later';
   if (!active.mani || force) {
     /* Доступ в силе — дочитываем настоящий каталог, чтобы владелец мог
        публиковать без перезагрузки страницы. */

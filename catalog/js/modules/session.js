@@ -12,9 +12,9 @@
  * Отдельным модулем, а не в app.js: тот и без них на пределе (проверка
  * `modules` держит планку 1200 строк), а эти двое — одна тема. */
 import { state } from './store.js';
-import { toast } from './core.js';
+import { appBusy, toast } from './core.js';
 import { renderAll } from './render.js';
-import { refresh } from './imports.js';
+import { importPending, refresh } from './imports.js';
 import { recheckAccess } from './publish.js';
 
 /* Каталог стоит на домашнем экране и живёт неделями: если обновлять данные
@@ -31,6 +31,9 @@ export function keepFresh() {
   const quiet = async () => {
     if (busy || document.hidden) return;
     if (Date.now() - (state.lastFetch || 0) < QUIET) return;
+    // человек держит открытое окно, печатает или ждёт подтверждения разбора 1С —
+    // обновимся в следующий раз, а не из-под его рук
+    if (appBusy() || importPending()) return;
     busy = true;
     try {
       if (state.session) { if (await recheckAccess(true) === 'ok') state.lastFetch = Date.now(); }
@@ -58,7 +61,7 @@ export function watchAccess({ now = false } = {}) {
     if (busy || !state.session) return;
     busy = true;
     let verdict = 'later';
-    try { verdict = await recheckAccess(); } catch (e) { verdict = 'later'; }
+    try { verdict = await recheckAccess(false, !appBusy() && !importPending()); } catch (e) { verdict = 'later'; }
     busy = false;
     if (verdict === 'revoked') {
       stop();
