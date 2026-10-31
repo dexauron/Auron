@@ -427,6 +427,8 @@ function syncControls() {
      магазине») его вешать нельзя: иначе они показываются всегда, даже
      пустыми — так на экране однажды повисла пустая белая полоса. */
   document.querySelectorAll('.guest-only').forEach((el) => { el.hidden = !!state.session; });
+  // подпись «Войти» у кнопки входа: показываем только тому, кто не вошёл
+  $('adminBtnLabel').hidden = !!state.session;
   if (ui.applyGuestMode) ui.applyGuestMode();   // класс «покупатель» на странице
   if (ui.renderShopBar) ui.renderShopBar();     // полоска «сколько выйдет»
   document.querySelectorAll('.purchase-only').forEach((el) => { el.hidden = !state.canPurchase; });

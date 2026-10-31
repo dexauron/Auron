@@ -858,7 +858,6 @@ export function applyServerless(pw) {
   state.isAdmin = true; state.role = 'admin'; state.canPurchase = true; state.canSales = true;
   saveSvAuth();
   $('adminBtn').classList.toggle('is-admin', true);
-  $('adminBtnLabel').hidden = true;
   saveCache();
   renderAll();
   // При входе ничего не удаляем автоматически по имени или штрихкоду.
@@ -873,7 +872,6 @@ export function applyStaff(pw) {
   state.isAdmin = false; state.role = 'staff'; state.canPurchase = true; state.canSales = true;
   saveSvAuth();
   $('adminBtn').classList.toggle('is-admin', true);
-  $('adminBtnLabel').hidden = true;
   saveCache();
   renderAll();
 }
