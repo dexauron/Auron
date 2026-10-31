@@ -347,9 +347,8 @@ async function fetchShowcase(base, onChunk) {
          наличию, которому сутки. */
       state.showcaseAt = String(meta.savedAt || '');
       const chunks = [];
-      // Куски показываем ПО МЕРЕ ПРИХОДА, а не после последнего: каталог на
-      // 17 тысяч товаров — это несколько мегабайт, и ждать их целиком перед
-      // первой картинкой в зале слишком долго.
+      // Куски показываем ПО МЕРЕ ПРИХОДА: каталог на 17 тысяч товаров — это
+      // несколько мегабайт, ждать их целиком перед первой картинкой нельзя.
       await Promise.all(meta.parts.map(async (h, i) => {
         const r = await netFetch(`${base}p/${String(i).padStart(2, '0')}.json?h=${h}`).catch(() => null);
         chunks[i] = (r && r.ok) ? await r.json().catch(() => []) : [];
