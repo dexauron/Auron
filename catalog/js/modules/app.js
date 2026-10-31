@@ -295,19 +295,14 @@ function bindEvents() {
     if (state.session) {
       // Бесплатный режим: две роли — владелец и сотрудник. Подпись человеческая,
       // без служебных слов вроде «owner» (раньше они попадали на экран).
-      let roleName, roleHint;
-      if (state.serverless) {
-        roleName = state.isAdmin ? 'Владелец' : 'Сотрудник магазина';
-        roleHint = state.isAdmin
-          ? 'Полный доступ: правка, загрузка файлов, публикация'
-          : 'Виден весь каталог, цены и продажи — без правки';
-      } else {
-        roleName = { admin: 'Главный администратор', manager: 'Аналитик / зал' }[state.role] || 'Сотрудник';
-        roleHint = {
-          admin: state.session.user?.email || '',
-          manager: 'Вход выполнен — цены, контакты и аналитика открыты',
-        }[state.role] || 'Вход выполнен';
-      }
+      /* Ролей две: владелец и сотрудник. Прежние подписи «Главный
+         администратор» и «Аналитик / зал» остались от сервера, где роли
+         выдавались аккаунтом; сервера нет с августа 2026, и та ветка не могла
+         выполниться — вход всегда ставит serverless. Убрана. */
+      const roleName = state.isAdmin ? 'Владелец' : 'Сотрудник магазина';
+      const roleHint = state.isAdmin
+        ? 'Полный доступ: правка, загрузка файлов, публикация'
+        : 'Виден весь каталог, цены и продажи — без правки';
       $('menuTitle').textContent = roleName;
       $('adminEmail').textContent = roleHint;
       $('menuAdminOnly').hidden = !state.isAdmin;
@@ -316,17 +311,12 @@ function bindEvents() {
       setRowText('menuSortCats', noCat
         ? `Разложить по категориям (${noCat} в «Прочем»)`
         : 'Разложить по категориям — всё разложено');
-      // Бесплатный режим: серверные функции скрываем — они работали только с сервером
-      if (state.serverless) {
-        $('menuSuppliers').hidden = true;
-        $('menuDedup').hidden = true;
-      } else {
-      }
+      // Серверные пункты меню скрыты навсегда: они работали только с сервером
+      $('menuSuppliers').hidden = true;
+      $('menuDedup').hidden = true;
       renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
       renderReviewsBadge();   // сколько отзывов уже опубликовано
       openSheet('adminMenuSheet');
-      if (!state.serverless) {
-      }
     } else {
       openLogin();
     }
