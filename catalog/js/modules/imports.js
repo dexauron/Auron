@@ -52,10 +52,11 @@ function nameKey(name) {
 
 function svIndex() {
   const byCode = new Map(), byBc = new Map(), byName = new Map(), byKey = new Map(), byArticle = new Map();
+  const bcOwners = new Map();     // штрихкод → ВСЕ товары, у которых он есть
   for (const p of state.products) {
     if (p.article) { const a = norm(p.article); byArticle.set(a, byArticle.has(a) ? null : p); }
     if (p.code) byCode.set(normCode(p.code), p);
-    for (const b of (p.barcodes || [])) byBc.set(String(b), p);
+    for (const b of (p.barcodes || [])) { byBc.set(String(b), p); bcOwners.set(String(b), [...(bcOwners.get(String(b)) || []), p]); }
     const normalizedName = norm(p.name);
     byName.set(normalizedName, byName.has(normalizedName) ? null : p);
     const k = nameKey(p.name);
@@ -63,7 +64,19 @@ function svIndex() {
     // такой не используем вовсе, чтобы не привязать штрихкод не туда
     if (k) byKey.set(k, byKey.has(k) ? null : p);
   }
-  return { byCode, byBc, byName, byKey, byArticle };
+  return { byCode, byBc, byName, byKey, byArticle, bcOwners };
+}
+/* Штрихкод из 1С принадлежит ровно одному товару. В 1С его переносят на новую
+ * карточку (завели товар заново), а старая в каталоге его
+ * держала вечно: один код висел на двух товарах, и сканер показывал не тот. */
+function claimBarcode(idx, p, b) {
+  const key = String(b);
+  for (const q of idx.bcOwners.get(key) || []) {
+    if (q === p) continue;
+    q.barcodes = (q.barcodes || []).filter((x) => String(x) !== key);
+    if (q.barcode_units) delete q.barcode_units[key];
+  }
+  idx.bcOwners.set(key, [p]); idx.byBc.set(key, p);
 }
 function svMatch(idx, code, barcodes, name) {
   const normalizedCode = code ? normCode(code) : '';
@@ -123,7 +136,8 @@ function svAddBarcodes(idx, p, barcodes) {
   if (!barcodes || !barcodes.length) return;
   const set = new Set([...(p.barcodes || []), ...barcodes].filter(Boolean));
   p.barcodes = [...set];
-  for (const b of barcodes) if (b) idx.byBc.set(String(b), p);
+  // штрихкод из строки 1С у товара с кодом 1С — значит, 1С отдала его этому товару
+  for (const b of barcodes) if (b) { if (p.code) claimBarcode(idx, p, b); else idx.byBc.set(String(b), p); }
 }
 // «Цены поставщиков» (parsePriceReport): товары + штрихкоды + поставщики + закупка + иногда розница
 function svUploadPrices(byKey) {
@@ -156,6 +170,7 @@ function svUploadPrices(byKey) {
 }
 function svUploadRetail(parsed) {
   const idx = svIndex(), unresolved = new Set(); let matched = 0;
+  const inFile = new Set();
   for (const rec of parsed.recs) {
     let p = svMatch(idx, rec.code, [], rec.name);
     if (!p && rec.article) {
@@ -169,12 +184,21 @@ function svUploadRetail(parsed) {
     if (rec.code && !p.code) { p.code = rec.code; idx.byCode.set(rec.code, p); }
     if (rec.retail != null) rememberRetail(p, rec.retail);
     if (rec.group) p.group_id = svGroupId(rec.group);
+    inFile.add(p);
     matched++;
   }
-  return { matched, missing: unresolved.size, missingList: [...unresolved] };
+  /* Каталог сам товары не удаляет: снятое в 1С висело на витрине годами.
+   * Удалять молча нельзя (могут быть заведённые вручную), поэтому показываем
+   * владельцу список «есть в каталоге, нет в 1С». Только когда в прайсе есть
+   * коды — иначе сопоставление по названию слишком неточное для такого вывода. */
+  const absentList = parsed.hasCodes
+    ? state.products.filter((p) => !inFile.has(p)).map((p) => `${p.name} [${p.code || 'без кода'}]`) : [];
+  return { matched, missing: unresolved.size, missingList: [...unresolved], noPriceList: parsed.noPrice || [], absentList };
 }
 function svUploadStock(parsed) {
   const idx = svIndex();
+  const hadStock = state.products.filter((p) => p.stock != null).length;
+  const inFile = new Set();
   for (const rec of parsed.recs) {
     const barcodes = rec.barcode ? [rec.barcode] : [];
     let p = svMatch(idx, rec.code, barcodes, rec.name);
@@ -183,8 +207,9 @@ function svUploadStock(parsed) {
     if (rec.code && !p.code) { p.code = rec.code; idx.byCode.set(String(rec.code), p); }
     svAddBarcodes(idx, p, barcodes);
     if (rec.group) p.group_id = svGroupId(rec.group);
-    if (rec.unit && !p.unit) p.unit = rec.unit;
-    if (rec.unit === 'кг') p.is_weighted = true;
+    // «Базовая единица» в остатках — главная единица товара в 1С. Её меняют
+    // (шт → кг), и каталог должен меняться следом, а не держать первую увиденную.
+    if (rec.unit) { p.unit = rec.unit; p.is_weighted = rec.unit === 'кг'; }
     if (rec.retail != null) rememberRetail(p, rec.retail);
     // описание из 1С — на ценник покупателю. Повтор названия описанием не
     // считаем: колонку «Характеристика» часто заполняют тем же названием
@@ -193,7 +218,23 @@ function svUploadStock(parsed) {
     // дата остатка из шапки отчёта («на конец дня: 12.08.2026») — без неё
     // непонятно, насколько число свежее, а устаревает оно за сутки
     p.stock_at = parsed.stockAt || null;
+    inFile.add(p);
   }
+  /* Товар пропал из отчёта «Остатки» — значит, на складе его нет: 1С не
+   * выводит строки без движения. Раньше у такого товара оставался прежний
+   * остаток, и витрина месяцами писала «есть в наличии». Обнуляем, но только
+   * по ПОЛНОМУ отчёту: отчёт с отбором по одной группе обнулил бы весь
+   * остальной магазин. Полным считаем отчёт, где товаров не меньше половины
+   * от тех, у кого остаток уже известен. */
+  const full = parsed.recs.length >= hadStock / 2;
+  let zeroed = 0;
+  if (full) {
+    for (const p of state.products) {
+      if (inFile.has(p) || p.stock == null || !(Number(p.stock) > 0)) continue;
+      p.stock = 0; p.stock_at = parsed.stockAt || null; zeroed++;
+    }
+  }
+  return { zeroed, partial: !full };
 }
 function svUploadSales(parsed) {
   state.sales = (state.sales || []).filter((s) => !(s.period_from === (parsed.periodFrom || null) && s.period_to === (parsed.periodTo || null)));
@@ -277,12 +318,17 @@ function svUploadBarcodes(parsed) {
   const idx = svIndex();
   let added = 0; let matched = 0; const missing = new Set();
   for (const rec of parsed.recs) {
-    const p = rec.code ? idx.byCode.get(normCode(rec.code)) : svMatch(idx, null, [rec.barcode], rec.name);
+    // Справочник — это слово 1С о том, чей штрихкод. Поэтому товар ищем
+    // сперва по названию из справочника, а по самому штрихкоду — в последнюю
+    // очередь: по нему нашёлся бы прежний владелец, у которого код уже забрали.
+    const k = nameKey(rec.name);
+    const named = idx.byName.get(norm(rec.name)) || (k && idx.byKey.get(k)) || null;
+    const p = rec.code ? idx.byCode.get(normCode(rec.code)) : (named || svMatch(idx, null, [rec.barcode], rec.name));
     if (!p) { missing.add(rec.name); continue; }
     p.barcodes = p.barcodes || [];
     matched++;
     if (!p.barcodes.includes(rec.barcode)) { p.barcodes.push(rec.barcode); added++; }
-    idx.byBc.set(String(rec.barcode), p);
+    claimBarcode(idx, p, rec.barcode);
     if (rec.unit) {
       p.barcode_units = p.barcode_units || {};
       p.barcode_units[rec.barcode] = rec.unit;
@@ -557,17 +603,30 @@ function parseRetailList(rows) {
   }
   const { cols, dataStart } = det;
   const fileDate = parseHeaderDate(rows);
-  const recs = []; let group = null;
+  // прочие колонки цен (закупочная): у строки-группы они пустые, у товара — нет
+  const head = (rows[dataStart - 1] || []).map((v) => cellStr(v).toLowerCase());
+  const otherPrice = head.map((l, c) => (c !== cols.retail && /цен/.test(l) ? c : -1)).filter((c) => c >= 0);
+  const recs = []; const noPrice = []; let group = null;
   for (let r = dataStart; r < rows.length; r++) {
     const name = cellStr(rows[r][cols.name]);
     if (!name) continue;
     if (/^\s*(итого|всего|номенклатура|наименование)/i.test(name)) continue;
     const retail = parsePriceNum(rows[r][cols.retail]);
-    if (retail == null) { group = name; continue; } // строка без цены — заголовок группы
-    const art = (name.match(/арт[\.\s№:]*([0-9a-zа-яё][0-9a-zа-яё\-\/.]*)/i) || [])[1] || null;
+    if (retail == null) {
+      /* Строка без цены — заголовок группы, НО только если у неё нет ни
+       * штрихкода, ни другой цены. Товар, которому в 1С забыли поставить
+       * розничную цену, раньше становился «группой», и все товары за ним до
+       * следующей группы уезжали в категорию с его названием (так сотни товаров
+       * однажды попали в категорию с названием одной зарядки). Такой товар пропускаем и называем. */
+      const bc = cols.barcode !== undefined ? cellStr(rows[r][cols.barcode]) : '';
+      if (bc || otherPrice.some((c) => parsePriceNum(rows[r][c]) != null)) { noPrice.push(name); continue; }
+      group = name; continue;
+    }
+    // «Арт.» — отдельным словом: иначе из «Карты» артикулом выходило «ы»
+    const art = (name.match(/(?:^|[^0-9a-zа-яё])арт(?:икул)?[.\s№:]+([0-9a-zа-яё][0-9a-zа-яё\-\/.]*)/i) || [])[1] || null;
     recs.push({ name, code: cols.code !== undefined ? normCode(rows[r][cols.code]) : null, article: cols.article !== undefined ? cellStr(rows[r][cols.article]) || art : art, group, retail });
   }
-  return { recs, fileDate };
+  return { recs, fileDate, noPrice, hasCodes: cols.code !== undefined };
 }
 
 // Единица штрихкода из 1С приходит строкой: «шт», «упак (24)», «кг (2,5)»,
@@ -854,10 +913,18 @@ export async function smartRun() {
       if (e.type === 'prices') svUploadPrices(e.byKey);
       else if (e.type === 'retail') {
         const r = svUploadRetail(e.parsed);
-        setSmartRowStatus(e, `загружено: ${r.matched}` + (r.missing ? `. Не сопоставлено однозначно: ${r.missing}${missingHint(e, r.missingList)}` : ''));
+        setSmartRowStatus(e, `загружено: ${r.matched}` + (r.missing ? `. Не сопоставлено однозначно: ${r.missing}${missingHint(e, r.missingList)}` : '')
+          + (r.noPriceList.length ? `. Без розничной цены, пропущено: ${r.noPriceList.length}${missingHint({ name: e.name + ' — без цены' }, r.noPriceList)}` : '')
+          + (r.absentList.length ? `. Есть в каталоге, нет в прайсе 1С: ${r.absentList.length} (список можно скачать)` : ''));
+        if (r.absentList.length) ui.lastMissing.push({ file: 'Есть в каталоге, нет в прайс-листе 1С', codes: r.absentList });
         okCount++; continue;
       }
-      else if (e.type === 'stock') svUploadStock(e.parsed);
+      else if (e.type === 'stock') {
+        const r = svUploadStock(e.parsed);
+        setSmartRowStatus(e, 'загружено' + (r.zeroed ? `. Нет в отчёте — остаток обнулён: ${r.zeroed}` : '')
+          + (r.partial ? '. Отчёт неполный — остатки остальных товаров не трогал' : ''));
+        okCount++; continue;
+      }
       else if (e.type === 'sales') {
         const r = svUploadSales(e.parsed);
         setSmartRowStatus(e, `строк продаж: ${r.rows}`
