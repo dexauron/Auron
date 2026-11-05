@@ -1,0 +1,203 @@
+/* Way Market — единый визуальный слой каталога и всех рабочих окон.
+ * Поверхности, отступы и состояния общие; расчёты и маршруты остаются в модулях. */
+:root, :root[data-theme="dark"] {
+  --bg: #10141e;
+  --surface: #1b2230;
+  --surface-2: #242e40;
+  --surface-3: #35415a;
+  --text: #f4f6fc;
+  --text-2: #a7b1c5;
+  --muted: #a7b1c5;
+  --brand-ink: #b4b3ff;
+  --border: #344057;
+  --radius: 18px;
+  --radius-sm: 12px;
+  --radius-xs: 8px;
+  --shadow: 0 8px 28px #00000026;
+  --control-h: 48px;
+  --focus-ring: #b4b3ff;
+  --page-pad: 16px;
+  --tabbar-h: 64px;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f6fa;
+    --surface: #ffffff;
+    --surface-2: #edf0f7;
+    --surface-3: #dce2ee;
+    --text: #202738;
+    --text-2: #626d81;
+    --muted: #626d81;
+    --brand-ink: #4846bd;
+    --border: #dce2ed;
+    --shadow: 0 8px 28px #2027380d;
+    --focus-ring: #5e5ce6;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f4f6fa;
+  --surface: #ffffff;
+  --surface-2: #edf0f7;
+  --surface-3: #dce2ee;
+  --text: #202738;
+  --text-2: #626d81;
+  --muted: #626d81;
+  --brand-ink: #4846bd;
+  --border: #dce2ed;
+  --shadow: 0 8px 28px #2027380d;
+  --focus-ring: #5e5ce6;
+}
+/* Семантические оттенки текста проходят на светлых поверхностях. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) { --pos: #187a42; --neg: #c73835; --warn: #9b5c05; }
+}
+:root[data-theme="light"] { --pos: #187a42; --neg: #c73835; --warn: #9b5c05; }
+
+body { line-height: 1.45; letter-spacing: -.012em; }
+button, input, select, textarea { font-family: inherit; }
+button { touch-action: manipulation; }
+input, select, textarea { font-size: 16px; }
+button, a, input, select, textarea, summary { scroll-margin-block: 90px; }
+:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
+.input:focus-visible, .search-input:focus-visible, .ios-inp:focus-visible { outline-offset: 1px; }
+::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+
+.header { padding-inline: calc(var(--page-pad) + env(safe-area-inset-left)) calc(var(--page-pad) + env(safe-area-inset-right)); }
+.header-row { gap: 12px; margin-bottom: 14px; }
+.brand { min-width: 0; }
+.brand-name { font-size: 18px; font-weight: 750; letter-spacing: -.035em; }
+.brand-sub { margin-top: 3px; font-size: 12px; }
+.brand-logo-img { border: 1px solid var(--border); background: #fff; }
+.header::after { opacity: .14; }
+.content { padding: 18px calc(var(--page-pad) + env(safe-area-inset-right)) 24px calc(var(--page-pad) + env(safe-area-inset-left)); }
+.search-wrap { min-width: 0; }
+.search-input { height: 54px; border-radius: 16px; box-shadow: 0 2px 4px #00000004; }
+.search-input::placeholder, .input::placeholder { color: var(--text-2); opacity: 1; }
+.search-row { gap: 10px; }
+.round-btn, .icon-btn, .icon-btn-round, .icon-btn.is-admin { min-width: 44px; min-height: 44px; }
+.round-btn { width: 48px; height: 48px; }
+.icon-btn { color: var(--text); }
+.chip { min-height: 40px; border-radius: 11px; font-weight: 550; }
+.active-filter { min-height: 36px; }
+mark { background: color-mix(in srgb, var(--accent) 17%, transparent); }
+
+/* Каталог: название и цена читаются отдельно, код остаётся отдельным действием. */
+.grid { gap: 12px; }
+.card { border-color: var(--border); border-radius: var(--radius); }
+.card-body { padding: 12px 10px 14px; gap: 7px; }
+.card-name { font-size: 15px; line-height: 1.4; font-weight: 650; }
+.card-photo { background: var(--surface-2); }
+.card-photo img { object-fit: contain; }
+.card-photo.no-photo { height: 80px; min-height: 80px; aspect-ratio: auto; opacity: 1; color: var(--text-2); }
+.card-photo.no-photo .ic { width: 28px; height: 28px; opacity: .4; }
+.card-price { font-size: 21px; font-weight: 750; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.card-code { min-height: 40px; max-width: 100%; overflow-wrap: anywhere; white-space: normal; padding: 7px 10px; border-radius: 11px; font-weight: 700; }
+.grid.list .card-row { min-height: 60px; padding: 8px 12px; gap: 12px; margin-bottom: 6px; }
+.grid.list .card-name { font-size: 15px; line-height: 1.4; margin-bottom: 2px; }
+.grid.list .card-price { font-size: 14px; padding-top: 0; }
+.grid.list .card-code { min-height: 44px; max-width: 44%; justify-content: center; font-size: 21px; padding: 8px 11px; }
+.grid.compact .card-code { min-height: 36px; }
+.tag { line-height: 1.35; border-radius: 7px; }
+.cat-tile { border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 15px; }
+.cat-name { font-size: 16px; line-height: 1.35; }
+.empty-state { padding: 52px 24px; max-width: 480px; margin-inline: auto; }
+.empty-title { font-size: 21px; letter-spacing: -.03em; }
+.empty-text { font-size: 15px; line-height: 1.5; margin-top: 8px; }
+
+/* Общие элементы управления во всех окнах. */
+.btn { min-height: var(--control-h); border-radius: var(--radius-sm); padding: 12px 16px; font-size: 16px; line-height: 1.35; font-weight: 650; }
+.btn-primary { background: var(--accent); box-shadow: 0 3px 8px #5e5ce61a; }
+.btn-secondary { background: var(--surface); border-color: var(--border); }
+.btn-ghost { color: var(--brand-ink); }
+.btn:disabled { opacity: .48; }
+.btn-block { margin-top: 14px; }
+.input { min-height: var(--control-h); border-radius: var(--radius-sm); padding: 12px 14px; line-height: 1.4; }
+textarea.input { min-height: 112px; }
+.field-label { color: var(--text-2); font-size: 14px; line-height: 1.4; font-weight: 550; margin-top: 18px; margin-bottom: 7px; }
+.input-row > *, .input-pair > * { min-width: 0; }
+.form-error { border: 1px solid color-mix(in srgb, var(--danger) 26%, transparent); padding: 12px 14px; font-size: 14px; line-height: 1.5; }
+.banner { border: 1px solid color-mix(in srgb, currentColor 18%, transparent); padding: 12px 14px; font-size: 14px; line-height: 1.5; }
+.ios-row, .field-row, .price-row, .grp-row { min-width: 0; }
+.ios-row { min-height: 54px; padding: 13px 16px; font-size: 16px; gap: 10px; }
+.ios-row-title { line-height: 1.4; overflow-wrap: anywhere; }
+.ios-row-value { font-size: 15px; font-variant-numeric: tabular-nums; }
+.ios-group { border: 1px solid var(--border); border-radius: 16px; }
+.ios-group-title { font-size: 13px; font-weight: 650; letter-spacing: .025em; color: var(--text-2); margin-top: 24px; margin-bottom: 9px; text-transform: none; }
+.ios-note { font-size: 14px; line-height: 1.55; margin-top: 10px; }
+.ios-inp { min-height: 40px; font-size: 16px; border-radius: 8px; }
+.ios-row:focus-within { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.ios-row:has(input[type="password"]) { flex-direction: column; align-items: stretch; gap: 8px; padding: 14px 16px; }
+.ios-row input[type="password"] { width: 100%; max-width: none; text-align: left; background: var(--surface-2); padding: 10px 12px; }
+.ios-switch:has(input:focus-visible) { outline: 3px solid var(--focus-ring); outline-offset: 4px; border-radius: 20px; }
+.seg { padding: 4px; border-radius: 12px; gap: 3px; }
+.seg button { min-height: 40px; border-radius: 9px; line-height: 1.3; }
+
+/* Все 39 окон: ясная шапка, спокойный фон, единая плотность. */
+.sheet { border: 1px solid var(--border); border-bottom: 0; border-radius: 24px 24px 0 0; max-height: calc(100dvh - 20px - env(safe-area-inset-top)); animation-duration: .22s; }
+.sheet-body { --sheet-px: 20px; padding-top: 18px; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+.sheet-title { font-size: 23px; line-height: 1.25; font-weight: 750; letter-spacing: -.035em; min-height: 44px; margin-bottom: 16px; }
+.sheet-handle { width: 36px; height: 4px; margin-top: 10px; margin-bottom: 6px; opacity: .65; }
+.sheet-back { top: 38px; left: 16px; width: 40px; height: 40px; background: var(--surface-2); color: var(--text); }
+#productSheet .sheet-back, #loginSheet .sheet-back { top: 10px; left: 10px; }
+#productSheet .sheet-title { padding-left: 0; }
+.sheet-head { padding-bottom: 14px; }
+.ios-nav { grid-template-columns: minmax(52px, auto) minmax(0, 1fr) minmax(52px, auto); min-height: 60px; gap: 8px; padding-inline: 16px; border-bottom-color: var(--border); }
+.ios-nav-title { font-size: 18px; line-height: 1.3; font-weight: 650; min-width: 0; text-wrap: balance; }
+.ios-nav-btn { min-height: 44px; font-size: 15px; }
+.login-logo { width: 64px; height: 64px; margin-bottom: 16px; border: 1px solid var(--border); padding: 4px; background: #fff; }
+.login-title { font-size: 28px; margin-bottom: 8px; }
+.login-title { padding-left: 0; }
+.login-sub { font-size: 15px; line-height: 1.55; margin-bottom: 18px; }
+.login-title, .login-sub { text-align: left; }
+.sheet-actions { margin-top: 16px; gap: 10px; }
+.sheet-actions .btn { min-height: 46px; }
+.field-val, .ord-sum, .pt-sum b { font-variant-numeric: tabular-nums; }
+.card-price, .field-hero-val, .pt-sum b { overflow-wrap: anywhere; }
+.field-main .field-val { font-size: 22px; font-weight: 750; letter-spacing: .02em; }
+.copy-btn { width: 44px; height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--brand-ink); }
+.copy-btn .ic { width: 19px; height: 19px; }
+table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { color: var(--text-2); font-weight: 600; }
+td, th { line-height: 1.45; }
+.smart-row, .rise-box, .pt-sum { border-radius: 12px; padding: 14px; line-height: 1.5; }
+.filter-actions, .pick-actions { border-top: 1px solid var(--border); padding-top: 14px; }
+
+/* Навигация читается как постоянная часть приложения, а не набор кнопок. */
+.tabbar { background: color-mix(in srgb, var(--surface) 94%, transparent); border-top: 1px solid var(--border); padding-top: 8px; }
+.tabbar .tab { min-height: 56px; color: var(--text-2); gap: 5px; padding: 3px 4px 6px; }
+.tabbar .tab .tab-ico { display: grid; place-items: center; min-width: 46px; min-height: 28px; border-radius: 10px; }
+.tabbar .tab .tab-txt { font-size: 11px; font-weight: 550; line-height: 1.25; }
+.tabbar .tab.active { color: var(--brand-ink); }
+.tabbar .tab.active .tab-ico { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.tabbar .tab.active .tab-txt { font-weight: 700; }
+.toast { border: 1px solid var(--border); border-radius: 14px; line-height: 1.4; box-shadow: var(--shadow); }
+
+@media (hover: hover) {
+  .btn-secondary:hover, .ios-row-link:hover, .chip:hover, .icon-btn:hover { background: var(--surface-2); }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .card:hover { border-color: color-mix(in srgb, var(--brand-ink) 50%, var(--border)); }
+}
+@media (max-width: 360px) {
+  :root, :root[data-theme] { --page-pad: 12px; }
+  .header-btns { gap: 5px; }
+  .brand-name { font-size: 16px; }
+  .sheet-body { --sheet-px: 16px; }
+  .sheet-title { font-size: 21px; }
+  .grid.list .card-row { padding: 8px 12px; gap: 10px; }
+  .grid.list .card-code { font-size: 18px; padding-inline: 8px; }
+  .ios-row { padding-inline: 13px; }
+  .tabbar .tab .tab-txt { font-size: 10.5px; }
+}
+@media (min-width: 700px) {
+  :root, :root[data-theme] { --tabbar-h: 88px; }
+  .sheet { max-width: 720px; border-bottom: 1px solid var(--border); border-radius: 24px; max-height: calc(100dvh - 64px); }
+  .sheet-small { max-width: 480px; }
+  .sheet-body { --sheet-px: 28px; padding-top: 22px; }
+  .sheet-back { top: 44px; left: 28px; }
+  .sheet-handle { margin-top: 12px; }
+  .tabbar { left: 50%; right: auto; width: min(800px, calc(100% - 40px)); transform: translateX(-50%); bottom: 16px; border: 1px solid var(--border); border-radius: 20px; padding: 8px 12px; box-shadow: var(--shadow); }
+  .compare-bar { left: 50%; right: auto; width: min(800px, calc(100% - 40px)); transform: translateX(-50%); bottom: calc(var(--tabbar-h) + 10px); border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
